@@ -572,13 +572,12 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
 @mcp.tool(annotations=ToolAnnotations(idempotentHint=True, destructiveHint=False))
 async def setup_vault(ctx: Context) -> list[str]:
-    """Create Jobs/, Templates/Job.md, Resume/Extra Facts.md and a Resume/Projects note per Base resume project.
-
-    Never overwrites existing files."""
+    """Create Jobs/, Templates/Job.md, the Web Clipper template, Job Tracker.base, Resume/Extra Facts.md and a
+    Resume/Projects note per Base resume project. Never overwrites existing files (see resume://knowledge/obsidian-setup)."""
     return await _setup_vault(await base_resume(ctx))
 
 
-async def _setup_vault(base: Resume) -> list[str]:
+async def _setup_vault(base: Resume | None) -> list[str]:
     require_vault()
     created: list[str] = []
 
@@ -591,9 +590,11 @@ async def _setup_vault(base: Resume) -> list[str]:
 
     (VAULT / "Jobs").mkdir(exist_ok=True)
     write("Templates/Job.md", md("templates", "job-note.md"))
+    write("Templates/Web Clipper - Job posting.json", md("templates", "web-clipper-job.json"))
+    write("Job Tracker.base", md("templates", "job-tracker.base"))
     write("Resume/Extra Facts.md", md("templates", "extra-facts.md"))
     projects_dir = VAULT / "Resume" / "Projects"
-    if not any(projects_dir.glob("*.md")):
+    if base is not None and not any(projects_dir.glob("*.md")):
         for p in entries(base, "projects"):
             post = frontmatter.Post(
                 fill(md("templates", "project-note.md"), bullets=bullets(p["bullets"], "")),
@@ -1007,6 +1008,42 @@ async def save_weekly_review(
     return str(path)
 
 
+class StatusResult(BaseModel):
+    job: str
+    status: str
+    applied_on: str | None
+    follow_up: str | None
+
+
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=False, idempotentHint=True))
+def mark_job_applied(
+    job: str,
+    applied_on: Annotated[str, Field(description="YYYY-MM-DD; default today")] = "",
+    follow_up_days: Annotated[int, Field(ge=0, le=60, description="Days until the follow-up reminder")] = 7,
+    status: Literal["applied", "interview", "offer", "rejected", "skip"] = "applied",
+) -> StatusResult:
+    """Update a job note's status for the Job Tracker. Applying also sets applied_on and follow_up dates."""
+    note = find_job(job)
+    meta: dict[str, Any] = {"status": status}
+    if status == "applied":
+        applied = date.fromisoformat(applied_on) if applied_on else date.today()
+        meta |= {"applied_on": applied.isoformat(), "follow_up": (applied + timedelta(days=follow_up_days)).isoformat()}
+    write_note(note, meta)
+    updated = find_job(note.id)
+    return StatusResult(
+        job=note.id,
+        status=status,
+        applied_on=updated.get("applied_on") or None,
+        follow_up=updated.get("follow_up") or None,
+    )
+
+
+@mcp.prompt(title="Tailor all pending jobs")
+def tailor_all_pending() -> str:
+    """Run the tailoring workflow for every job note still marked todo, then summarize."""
+    return md("prompts", "tailor-all-pending.md")
+
+
 @mcp.prompt(title="Weekly job-search review")
 def weekly_review(week_of: str = "") -> str:
     """Summarize the week's applications and turn the most common gaps into a learning plan."""
@@ -1017,10 +1054,16 @@ if __name__ == "__main__":
     if "--setup-vault" in sys.argv:
 
         async def _main() -> None:
+            base = None
             async with httpx.AsyncClient(timeout=30) as http:
-                resumes = await call(App(http), "GET", "/resumes")
-            base = next(r for r in resumes["items"] if r["isBase"])
-            print("\n".join(await _setup_vault(base)) or "Everything already existed.")
+                try:
+                    base = next((r for r in (await call(App(http), "GET", "/resumes"))["items"] if r["isBase"]), None)
+                except ToolError:
+                    print("(App not running: skipping starter project notes.)")
+            try:
+                print("\n".join(await _setup_vault(base)) or "Everything already existed.")
+            except ToolError as err:
+                sys.exit(str(err))
 
         asyncio.run(_main())
     else:

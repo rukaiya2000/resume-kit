@@ -1,0 +1,56 @@
+filters:
+  and:
+    - file.inFolder("Jobs")
+properties:
+  note.company:
+    displayName: Company
+  note.role:
+    displayName: Role
+  note.status:
+    displayName: Status
+  note.match_score:
+    displayName: Score
+  note.must_have_coverage:
+    displayName: Must-have
+  note.generated_at:
+    displayName: Tailored
+  note.applied_on:
+    displayName: Applied
+  note.follow_up:
+    displayName: Follow up
+views:
+  - type: table
+    name: Pipeline
+    groupBy:
+      property: note.status
+      direction: ASC
+    order:
+      - file.name
+      - note.company
+      - note.role
+      - note.match_score
+      - note.must_have_coverage
+      - note.generated_at
+      - note.applied_on
+      - note.follow_up
+  - type: table
+    name: To tailor
+    filters:
+      and:
+        - 'status == "todo"'
+    order:
+      - file.name
+      - note.company
+      - note.role
+  - type: table
+    name: Follow-ups due
+    filters:
+      and:
+        - 'status == "applied"'
+        - "!follow_up.isEmpty()"
+        - "follow_up <= today()"
+    order:
+      - file.name
+      - note.company
+      - note.applied_on
+      - note.follow_up

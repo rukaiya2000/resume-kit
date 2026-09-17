@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "0.1.0",
+  "name": "Job posting",
+  "behavior": "create",
+  "noteNameFormat": "{{schema:@JobPosting:hiringOrganization.name}} - {{schema:@JobPosting:title}}",
+  "path": "Jobs",
+  "noteContentFormat": "{{content}}",
+  "properties": [
+    { "name": "company", "value": "{{schema:@JobPosting:hiringOrganization.name}}", "type": "text" },
+    { "name": "role", "value": "{{schema:@JobPosting:title}}", "type": "text" },
+    { "name": "url", "value": "{{url}}", "type": "text" },
+    { "name": "location", "value": "{{schema:@JobPosting:jobLocation.address.addressLocality}}", "type": "text" },
+    { "name": "status", "value": "todo", "type": "text" },
+    { "name": "clipped", "value": "{{date|date:\"YYYY-MM-DD\"}}", "type": "date" },
+    { "name": "applied_on", "value": "", "type": "date" },
+    { "name": "follow_up", "value": "", "type": "date" },
+    { "name": "notes", "value": "", "type": "text" },
+    { "name": "template", "value": "", "type": "text" }
+  ],
+  "triggers": [
+    "schema:@JobPosting",
+    "https://www.linkedin.com/jobs/",
+    "https://job-boards.greenhouse.io/",
+    "https://boards.greenhouse.io/",
+    "https://jobs.lever.co/",
+    "https://jobs.ashbyhq.com/",
+    "https://careers.google.com/",
+    "https://www.google.com/about/careers/"
+  ]
+}

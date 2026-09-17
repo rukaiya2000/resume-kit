@@ -204,3 +204,18 @@ def test_check_pdf_flags_unreadable_pdf():
 def test_week_start_is_monday(server):
     assert server.week_start("2026-09-16").isoformat() == "2026-09-14"
     assert server.week_start("2026-09-20").isoformat() == "2026-09-14"
+
+
+def test_mark_job_applied_sets_dates_and_tracker_template_is_valid_yaml(server):
+    import yaml
+
+    (server.VAULT / "Jobs" / "Acme - Engineer.md").write_text("---\ncompany: Acme\nstatus: generated\n---\nJD text.\n")
+    result = server.mark_job_applied("acme", applied_on="2026-09-16", follow_up_days=5)
+    assert (result.status, result.applied_on, result.follow_up) == ("applied", "2026-09-16", "2026-09-21")
+    assert server.mark_job_applied("acme", status="interview").applied_on == "2026-09-16"
+
+    tracker = yaml.safe_load(server.md("templates", "job-tracker.base"))
+    assert [v["name"] for v in tracker["views"]] == ["Pipeline", "To tailor", "Follow-ups due"]
+    clipper = __import__("json").loads(server.md("templates", "web-clipper-job.json"))
+    assert clipper["behavior"] == "create" and clipper["path"] == "Jobs"
+    assert {p["type"] for p in clipper["properties"]} <= {"text", "multitext", "number", "checkbox", "date", "datetime"}

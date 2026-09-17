@@ -4,6 +4,8 @@ role:
 url:
 location:
 status: todo
+applied_on:
+follow_up:
 notes:
 template:
 ---

@@ -22,6 +22,10 @@ On first start the API creates the `classic` template and a sample Base resume.
 
 Claude reads the job, your Base resume, `Resume/Projects/*.md` and `Resume/Extra Facts.md`, rewrites Technical Skills, Experience bullets and Projects, exports the PDF, and writes a Match Report (score, gaps, how to improve) into the job note. Tailored resumes get an AI badge on the dashboard; **Match** in the editor shows the report and re-scores after edits.
 
+**Also from Claude Code:** “tailor all pending jobs”, “I applied to Google” (sets `applied_on` and a follow-up in 7 days), and “weekly review” (writes `Reviews/Week of <Monday>.md` with your most common gaps and a learning plan).
+
+**In Obsidian:** clip job pages straight into `Jobs/` with the Web Clipper template, and track everything in `Job Tracker.base` (Pipeline, To tailor, Follow-ups due). See [`ai/knowledge/obsidian-setup.md`](ai/knowledge/obsidian-setup.md).
+
 The AI side is the Python MCP server in [`ai/`](ai/README.md). Its workflow, guardrails, writing style, skills dictionary and report layout are Markdown files you can edit. `pnpm setup-vault` scaffolds the Obsidian folders.
 
 ## Where things live

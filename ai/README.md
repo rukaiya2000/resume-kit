@@ -11,10 +11,14 @@ Phase 2 of Resume Creator: an MCP server (Python 3.14, official `mcp` SDK 2.x) t
 | `knowledge/skills-dictionary.md` | Skills and aliases the keyword scorer knows (tables are parsed) | resource `resume://knowledge/skills-dictionary` |
 | `prompts/tailor-resume.md` | The end-to-end workflow | prompt `tailor_resume`, resource `resume://prompts/tailor-resume` |
 | `prompts/review-match.md` | How to judge requirements, gaps and improvements | prompt `review_match`, resource `resume://prompts/review-match` |
+| `knowledge/obsidian-setup.md` | Job note properties, Web Clipper import, Job Tracker views | resource `resume://knowledge/obsidian-setup` |
+| `prompts/tailor-all-pending.md` | Tailor every `todo` job in one go | prompt `tailor_all_pending`, resource `resume://prompts/tailor-all-pending` |
 | `prompts/weekly-review.md` | Turning a week's gaps into a focus list and learning plan | prompt `weekly_review`, resource `resume://prompts/weekly-review` |
 | `templates/match-report.md` | Layout of the report written into job notes (incl. PDF check and Changes from Base) | used by `save_match_report` |
 | `templates/weekly-review.md` | Layout of `Reviews/Week of <Monday>.md` | used by `save_weekly_review` |
 | `templates/job-note.md`, `project-note.md`, `extra-facts.md` | Obsidian note templates | used by `setup_vault` |
+| `templates/web-clipper-job.json` | Obsidian Web Clipper template that saves job pages into `Jobs/` | copied to the vault by `setup_vault` |
+| `templates/job-tracker.base` | Obsidian Bases tracker: Pipeline, To tailor, Follow-ups due | copied to the vault by `setup_vault` |
 
 **Code is two files:**
 
@@ -34,9 +38,10 @@ Phase 2 of Resume Creator: an MCP server (Python 3.14, official `mcp` SDK 2.x) t
 | Tool | `save_match_report` | Store the review, diff and PDF check in the app and write the report into the job note |
 | Tool | `get_weekly_summary` | Roll up a week's job notes: scores, statuses, most common missing keywords and real gaps (read-only) |
 | Tool | `save_weekly_review` | Write `Reviews/Week of <Monday>.md` |
+| Tool | `mark_job_applied` | Set a job's status; applying also sets `applied_on` and a `follow_up` date |
 | Resource | `resume://knowledge/*`, `resume://prompts/*` | The Markdown above |
 | Resource | `resume://vault/jobs`, `resume://vault/jobs/{job}`, `resume://vault/projects`, `resume://vault/extra-facts` | Live vault content |
-| Prompt | `tailor_resume(job)`, `review_match(job)`, `weekly_review(week_of)` | Workflows |
+| Prompt | `tailor_resume(job)`, `tailor_all_pending`, `review_match(job)`, `weekly_review(week_of)` | Workflows |
 
 Tool arguments and results are snake_case and validated with Pydantic; the server converts to the app's camelCase JSON when saving.
 
@@ -45,7 +50,7 @@ Tool arguments and results are snake_case and validated with Pydantic; the serve
 ```bash
 uv sync                         # once
 uv run server.py                # stdio MCP server (Claude Code starts it via ../.mcp.json)
-uv run server.py --setup-vault  # scaffold the Obsidian vault and exit
+uv run server.py --setup-vault  # scaffold the Obsidian vault and exit (works without the app; skips starter project notes)
 uv run pytest                   # tests
 uv run ruff check . && uv run ruff format --check .
 ```
