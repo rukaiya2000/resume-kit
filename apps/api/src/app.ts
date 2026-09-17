@@ -1,10 +1,12 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import {
+  JobLink,
+  MatchReport,
   Resume,
   Template,
   blankResume,
@@ -14,7 +16,7 @@ import {
   roleAbbrev,
 } from '@rc/core';
 import { exportResume, resolveExportPath } from './pdf';
-import { ConflictError, NotFoundError, PATHS, resumes, templates } from './store';
+import { ConflictError, NotFoundError, PATHS, ROOT, resumes, templates } from './store';
 
 export const app = new Hono().basePath('/api');
 
@@ -52,9 +54,18 @@ app.get('/resumes/:id', async (c) => c.json(await resumes.get(c.req.param('id'))
 app.put('/resumes/:id', async (c) => {
   const existing = await resumes.get(c.req.param('id'));
   const incoming = Resume.parse(await c.req.json());
-  // id, base flag, export history and createdAt are owned by the server.
+  // id, base flag, export history, job link, match report and createdAt are owned by the server,
+  // so an editor autosaving a stale copy can't overwrite them.
   return c.json(
-    await resumes.save({ ...incoming, id: existing.id, isBase: existing.isBase, exports: existing.exports, createdAt: existing.createdAt }),
+    await resumes.save({
+      ...incoming,
+      id: existing.id,
+      isBase: existing.isBase,
+      exports: existing.exports,
+      job: existing.job,
+      match: existing.match,
+      createdAt: existing.createdAt,
+    }),
   );
 });
 
@@ -72,6 +83,7 @@ app.post('/resumes/:id/duplicate', async (c) => {
       jobUrl: z.string().default(''),
       templateId: z.string().optional(),
       name: z.string().optional(),
+      job: JobLink.optional(),
     })
     .parse(await c.req.json().catch(() => ({})));
   const template = await templates.getOrDefault(body.templateId ?? source.templateId);
@@ -86,7 +98,9 @@ app.post('/resumes/:id/duplicate', async (c) => {
     jobUrl: body.jobUrl,
     templateId: template.id,
     exports: [],
-    source: 'manual',
+    source: body.job ? 'ai' : 'manual',
+    job: body.job,
+    match: undefined,
     createdAt: now(),
     updatedAt: now(),
   };
@@ -106,6 +120,42 @@ app.get('/export-name', (c) => {
 });
 
 app.post('/resumes/:id/export', async (c) => c.json(await exportResume(c.req.param('id'))));
+
+app.put('/resumes/:id/match', async (c) => {
+  const resume = await resumes.get(c.req.param('id'));
+  const match = MatchReport.parse(await c.req.json());
+  return c.json(await resumes.save({ ...resume, match }));
+});
+
+/** Keyword scoring lives in the Python AI package (ai/scoring.py); this runs it as a one-shot process. */
+function pythonKeywordMatch(input: { jobDescription: string; jobTitle: string; resume: Resume }): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('uv', ['run', '--quiet', '--directory', path.join(ROOT, 'ai'), 'python', 'scoring.py'], { stdio: 'pipe' });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (err += d));
+    child.on('error', (e) => reject(new Error(`Couldn't run the Python scorer (is uv installed?): ${e.message}`)));
+    child.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`Python scorer failed: ${err.trim().split('\n').at(-1) ?? code}`));
+      try {
+        resolve(JSON.parse(out));
+      } catch {
+        reject(new Error('Python scorer returned invalid JSON'));
+      }
+    });
+    child.stdin.end(JSON.stringify(input));
+  });
+}
+
+/** Re-runs the keyword check against the saved job description (the AI's requirement review is kept). */
+app.post('/resumes/:id/score', async (c) => {
+  const resume = await resumes.get(c.req.param('id'));
+  if (!resume.job?.description) throw new ConflictError('This resume has no job description to score against.');
+  const keywords = await pythonKeywordMatch({ jobDescription: resume.job.description, jobTitle: resume.job.title, resume });
+  const match = MatchReport.parse({ ...(resume.match ?? {}), keywords, scoredAt: now() });
+  return c.json(await resumes.save({ ...resume, match }));
+});
 
 // ---------- templates ----------
 

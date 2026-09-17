@@ -5,11 +5,21 @@ A local, Creddle-style resume builder. Edit content and design in the browser, k
 ## Run it
 
 ```bash
-pnpm setup      # once: install dependencies + download Chromium for PDF export
+pnpm setup      # once: install dependencies, Chromium for PDF export, and the Python env (uv)
 pnpm dev        # UI on http://localhost:5173, API on 127.0.0.1:8797
 ```
 
 On first start the API creates the `classic` template and a sample Base resume.
+
+## Tailor a resume to a job (AI, Phase 2)
+
+1. Keep `pnpm dev` running (and have [uv](https://docs.astral.sh/uv/) installed).
+2. In Obsidian, create `Jobs/<Company> - <Role>.md` from `Templates/Job.md` and paste the job description into the body.
+3. In Claude Code in this folder, ask “tailor my resume for <Company>” (the `tailor-resume` skill) or run the MCP prompt `/mcp__resume-ai__tailor_resume`. Approve the `resume-ai` server the first time.
+
+Claude reads the job, your Base resume, `Resume/Projects/*.md` and `Resume/Extra Facts.md`, rewrites Technical Skills, Experience bullets and Projects, exports the PDF, and writes a Match Report (score, gaps, how to improve) into the job note. Tailored resumes get an AI badge on the dashboard; **Match** in the editor shows the report and re-scores after edits.
+
+The AI side is the Python MCP server in [`ai/`](ai/README.md). Its workflow, guardrails, writing style, skills dictionary and report layout are Markdown files you can edit. `pnpm setup-vault` scaffolds the Obsidian folders.
 
 ## Where things live
 
@@ -24,13 +34,14 @@ On first start the API creates the `classic` template and a sample Base resume.
 - `packages/core` – zod schemas, design defaults/overrides, naming rules, and the shared `<ResumeDocument/>` renderer with fit-to-one-page.
 - `apps/api` – Hono API over the JSON files; renders PDFs by opening `/print/:id` in headless Chromium (Playwright), then sets metadata with pdf-lib.
 - `apps/web` – React + Vite UI: dashboard, templates, editor (Edit view / Resume view), print and web views.
+- `ai/` – Python MCP server (Phase 2): Obsidian vault, guardrails, keyword scoring, match reports. Behavior lives in Markdown under `ai/knowledge`, `ai/prompts`, `ai/templates`.
 
 The preview and the PDF use the same component and bundled fonts, so what you see is what gets exported.
 
 ## Scripts
 
 ```bash
-pnpm test        # unit tests (naming, week folders, overrides, schemas)
+pnpm test        # TypeScript unit tests + Python tests (ai/)
 pnpm typecheck   # all packages
 pnpm build       # production build of the UI
 ```

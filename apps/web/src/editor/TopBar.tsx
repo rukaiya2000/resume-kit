@@ -22,6 +22,7 @@ import { api, errorMessage } from '../lib/api';
 import { useInvalidate, useTemplates } from '../lib/queries';
 import { redo, undo, useEditor } from './store';
 import { useDesign } from './useDesign';
+import { MatchButton } from './MatchButton';
 import { printResume } from './useExport';
 
 export function TopBar({
@@ -79,6 +80,7 @@ export function TopBar({
       )}
       <div className="flex-1" />
 
+      {mode === 'resume' && <MatchButton />}
       {mode === 'resume' && <TemplatePicker />}
 
       {design && (

@@ -36,6 +36,7 @@ import {
   Pill,
   cn,
 } from '../components/ui';
+import { scoreTone } from '../editor/MatchButton';
 import { showExportToast } from '../editor/useExport';
 import { api, downloadJson, errorMessage, pickJsonFile } from '../lib/api';
 import { findTemplate, useInvalidate, useResumes, useTemplates } from '../lib/queries';
@@ -341,6 +342,12 @@ function ResumeCard({ resume, templates, defaultId, onDuplicate }: { resume: Res
         </div>
         <div className="-mt-1.5 truncate text-[13px] text-zinc-500">{resume.role || resume.name}</div>
         <div className={cn('flex flex-wrap gap-1.5')}>
+          {resume.source === 'ai' && <Pill tone="accent">AI</Pill>}
+          {resume.match && (
+            <Pill tone={scoreTone(resume.match.keywords.score)}>
+              Match {resume.match.keywords.score}
+            </Pill>
+          )}
           {fit && <FitPill fit={fit} />}
           {lastExport ? <Pill>Exported {format(parseISO(lastExport.at), 'MMM d')}</Pill> : <Pill>Not exported</Pill>}
         </div>

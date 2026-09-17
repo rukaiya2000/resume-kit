@@ -10,3 +10,9 @@ build/
 # personal files dropped in the project root
 /*.pdf
 /*.docx
+
+# python (ai/)
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/

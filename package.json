@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "concurrently -k -n api,web -c magenta,cyan \"pnpm --filter @rc/api dev\" \"pnpm --filter @rc/web dev\"",
     "build": "pnpm --filter @rc/web build",
-    "test": "vitest run",
+    "test": "vitest run && uv run --directory ai pytest -q",
     "typecheck": "pnpm -r typecheck",
-    "setup": "pnpm install && pnpm --filter @rc/api exec playwright install chromium"
+    "setup": "pnpm install && pnpm --filter @rc/api exec playwright install chromium && uv sync --directory ai",
+    "setup-vault": "uv run --directory ai server.py --setup-vault"
   },
   "devDependencies": {
     "concurrently": "^10.0.5",

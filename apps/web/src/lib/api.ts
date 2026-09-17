@@ -52,6 +52,7 @@ export const api = {
   duplicateResume: (id: string, body: { company: string; role: string; jobUrl: string; templateId?: string; name?: string }) =>
     request<Resume>('POST', `/resumes/${id}/duplicate`, body),
   exportResume: (id: string) => request<ExportResult>('POST', `/resumes/${id}/export`),
+  rescoreResume: (id: string) => request<Resume>('POST', `/resumes/${id}/score`),
   exportName: (name: string, company: string) =>
     request<{ path: string; file: string }>('GET', `/export-name?name=${encodeURIComponent(name)}&company=${encodeURIComponent(company)}`),
 

@@ -148,6 +148,47 @@ export type Section = z.infer<typeof Section>;
 export const ExportRecord = z.object({ path: z.string(), at: z.string(), pages: z.number() });
 export type ExportRecord = z.infer<typeof ExportRecord>;
 
+export const Requirement = z.object({
+  requirement: z.string(),
+  strength: z.enum(['strong', 'weak', 'missing']),
+  evidence: z.string(),
+});
+export type Requirement = z.infer<typeof Requirement>;
+
+export const MatchReport = z.object({
+  keywords: z.object({
+    score: z.number(),
+    mustHave: z.object({ matched: z.number(), total: z.number() }),
+    niceToHave: z.object({ matched: z.number(), total: z.number() }),
+    matched: z.array(z.string()),
+    aliasOnly: z.array(z.string()),
+    missingRequired: z.array(z.string()),
+    missingPreferred: z.array(z.string()),
+  }),
+  requirements: z.array(Requirement).default([]),
+  gaps: z.object({ real: z.array(z.string()), weak: z.array(z.string()) }).default({ real: [], weak: [] }),
+  improvements: z
+    .object({
+      addToNotes: z.array(z.string()),
+      strengthen: z.array(z.string()),
+      upskill: z.array(z.string()),
+      applicationTips: z.array(z.string()),
+    })
+    .default({ addToNotes: [], strengthen: [], upskill: [], applicationTips: [] }),
+  scoredAt: z.string(),
+});
+export type MatchReport = z.infer<typeof MatchReport>;
+
+/** The job a tailored resume was made for (Phase 2). */
+export const JobLink = z.object({
+  /** Path of the job note inside the Obsidian vault, e.g. "Jobs/Google - MLE.md". */
+  note: z.string(),
+  title: z.string(),
+  url: z.string(),
+  description: z.string(),
+});
+export type JobLink = z.infer<typeof JobLink>;
+
 export const Resume = z.object({
   id: z.string(),
   schemaVersion: z.literal(1),
@@ -162,6 +203,8 @@ export const Resume = z.object({
   sections: z.array(Section),
   exports: z.array(ExportRecord),
   source: z.enum(['manual', 'ai']),
+  job: JobLink.optional(),
+  match: MatchReport.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

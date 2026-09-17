@@ -1,6 +1,6 @@
 # PRD: Resume Creator
 
-**Status:** Phase 1 built (Must items); Should/Later items open · **Owner:** Rukaiya Khan · **Date:** 2026-09-16
+**Status:** Phase 1 built (Must items); Phase 2 built; cover letters and peer review open · **Owner:** Rukaiya Khan · **Date:** 2026-09-16
 
 | Phase | Scope |
 |---|---|
@@ -295,7 +295,22 @@ resume-creator/
 
 ---
 
-# PHASE 2: AI tailoring (next, summary)
+# PHASE 2: AI tailoring
+
+**Built 2026-09-16.** Changes from the summary below:
+- **Runtime:** the AI side is a Python 3.14 MCP server (`ai/`, official `mcp` SDK 2.x, uv) with only two Python files (`server.py`, `scoring.py`). Workflow, guardrails, writing style, skills dictionary and report layout are Markdown, served as MCP resources and prompts.
+- **Facts:** come from the Base resume plus Obsidian `Resume/Projects/*.md` and `Resume/Extra Facts.md` (no Profile.md).
+- **Scoring:** ported from `~/Documents/ats-scorer` to Python. It's the single scorer: the app's Re-score calls it.
+- **MCP:**
+  - Tools: `setup_vault`, `list_jobs`, `get_job_context`, `save_tailored_resume`, `export_resume`, `save_match_report`.
+  - Resources: knowledge, prompts and vault content.
+  - Prompts: `tailor_resume`, `review_match`.
+  - Elicitation (via a resolver) before replacing an existing tailored resume, and progress notifications on export.
+- **Guardrails:** the limits table and fact rules in `ai/knowledge/guardrails.md` are enforced by the server. Awards stay fixed.
+- **Job notes:** generated content sits between `<!-- resume-creator:start/end -->` markers and is replaced on re-run.
+
+(Original summary follows.)
+
 
 **Goal:** from a JD in Obsidian, Claude Code creates a tailored resume in the builder automatically, then writes a match report back to Obsidian.
 

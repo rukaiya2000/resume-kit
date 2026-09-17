@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "resume-ai": {
+      "command": "uv",
+      "args": ["run", "--quiet", "--directory", "ai", "server.py"]
+    }
+  }
+}
