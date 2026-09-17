@@ -22,6 +22,8 @@ On first start the API creates the `classic` template and a sample Base resume.
 
 Claude reads the job, your Base resume, `Resume/Projects/*.md` and `Resume/Extra Facts.md`, rewrites Technical Skills, Experience bullets and Projects, exports the PDF, and writes a Match Report (score, gaps, how to improve) into the job note. Tailored resumes get an AI badge on the dashboard; **Match** in the editor shows the report and re-scores after edits.
 
+**Cover letters:** open **Letter** in a resume's editor (or the card menu) to write one with the same header and design; it exports as `Khan_Rukaiya_<Company>_CoverLetter_<date>.pdf`. From Claude Code, “write a cover letter for Google” drafts it from the same facts (numbers not in your notes are rejected).
+
 **Also from Claude Code:** “tailor all pending jobs”, “I applied to Google” (sets `applied_on` and a follow-up in 7 days), and “weekly review” (writes `Reviews/Week of <Monday>.md` with your most common gaps and a learning plan).
 
 **In Obsidian:** clip job pages straight into `Jobs/` with the Web Clipper template, and track everything in `Job Tracker.base` (Pipeline, To tailor, Follow-ups due). See [`ai/knowledge/obsidian-setup.md`](ai/knowledge/obsidian-setup.md).

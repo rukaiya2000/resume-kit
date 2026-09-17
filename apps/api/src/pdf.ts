@@ -5,7 +5,7 @@ import { chromium, type Browser } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
 import { exportRelativePath, type Resume } from '@rc/core';
 import { WEB_ORIGIN } from './config';
-import { PATHS, resumes } from './store';
+import { PATHS, letters, resumes } from './store';
 
 let browserPromise: Promise<Browser> | null = null;
 function browser() {
@@ -31,10 +31,11 @@ export async function resolveExportPath(resume: Resume, date = new Date()) {
   return { rel, abs: path.join(PATHS.output, rel), fullName };
 }
 
-export async function renderPdf(resumeId: string): Promise<Uint8Array> {
+/** Opens a print route (`/print/:id` or `/print/letter/:id`) in headless Chromium and prints it. */
+export async function renderPdf(printPath: string): Promise<Uint8Array> {
   const page = await (await browser()).newPage();
   try {
-    await page.goto(`${WEB_ORIGIN}/print/${encodeURIComponent(resumeId)}`, { waitUntil: 'networkidle' });
+    await page.goto(`${WEB_ORIGIN}${printPath}`, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => (window as unknown as { __RESUME_READY__?: boolean }).__RESUME_READY__ === true, null, {
       timeout: 20_000,
     });
@@ -46,28 +47,52 @@ export async function renderPdf(resumeId: string): Promise<Uint8Array> {
   }
 }
 
-export async function exportResume(resumeId: string) {
-  const resume = await resumes.get(resumeId);
-  const { rel, abs, fullName } = await resolveExportPath(resume);
-  const raw = await renderPdf(resumeId);
-
+/** Sets metadata, writes the file, and returns the export record. */
+async function writePdf(raw: Uint8Array, abs: string, meta: { title: string; author: string; subject: string }) {
   const pdf = await PDFDocument.load(raw);
-  const who = fullName.trim() || 'Resume';
-  pdf.setTitle(`${who} – Resume`);
-  pdf.setAuthor(who);
-  pdf.setSubject([resume.company, resume.role].filter(Boolean).join(' – ') || 'Resume');
+  pdf.setTitle(meta.title);
+  pdf.setAuthor(meta.author);
+  pdf.setSubject(meta.subject);
   pdf.setCreator('Resume Creator');
   pdf.setProducer('Resume Creator');
   const bytes = await pdf.save();
-  const pages = pdf.getPageCount();
-
   const overwritten = existsSync(abs);
   await mkdir(path.dirname(abs), { recursive: true });
   await writeFile(abs, bytes);
+  return { pages: pdf.getPageCount(), overwritten, at: new Date().toISOString() };
+}
 
-  const at = new Date().toISOString();
-  const exports = [...resume.exports.filter((e) => e.path !== rel), { path: rel, at, pages }];
+export async function exportResume(resumeId: string) {
+  const resume = await resumes.get(resumeId);
+  const { rel, abs, fullName } = await resolveExportPath(resume);
+  const who = fullName.trim() || 'Resume';
+  const subject = [resume.company, resume.role].filter(Boolean).join(' – ') || 'Resume';
+  const result = await writePdf(await renderPdf(`/print/${encodeURIComponent(resumeId)}`), abs, { title: `${who} – Resume`, author: who, subject });
+
+  const exports = [...resume.exports.filter((e) => e.path !== rel), { path: rel, at: result.at, pages: result.pages }];
   await resumes.save({ ...resume, exports });
+  return { path: rel, absolutePath: abs, ...result };
+}
 
-  return { path: rel, absolutePath: abs, pages, overwritten, at };
+export async function exportLetter(letterId: string) {
+  const letter = await letters.get(letterId);
+  const resume = await resumes.get(letter.resumeId);
+  const fullName = resume.sections.find((s) => s.type === 'basics')?.basics?.name ?? '';
+  const input = { fullName, company: letter.company, role: letter.role, date: new Date(), kind: 'coverLetter' as const };
+  let rel = exportRelativePath(input);
+  const { items } = await letters.list();
+  if (letter.role && items.some((l) => l.id !== letter.id && l.exports.some((e) => e.path === rel))) {
+    rel = exportRelativePath({ ...input, includeRole: true });
+  }
+  const abs = path.join(PATHS.output, rel);
+  const who = fullName.trim() || 'Cover letter';
+  const subject = [letter.company, letter.role].filter(Boolean).join(' – ') || 'Cover letter';
+  const result = await writePdf(await renderPdf(`/print/letter/${encodeURIComponent(letterId)}`), abs, {
+    title: `${who} – Cover Letter`,
+    author: who,
+    subject,
+  });
+  const exports = [...letter.exports.filter((e) => e.path !== rel), { path: rel, at: result.at, pages: result.pages }];
+  await letters.save({ ...letter, exports });
+  return { path: rel, absolutePath: abs, ...result };
 }

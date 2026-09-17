@@ -116,3 +116,35 @@ test('match dialog shows the report and score history for an AI-tailored resume'
   await expect(page.getByText(/Keyword score: \d+\/100/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/Score history \(2 runs/)).toBeVisible();
 });
+
+test('cover letter: open from a resume, edit, and export with matching header and CoverLetter file name', async ({ page, request }) => {
+  const errors = collectErrors(page);
+  const base = await baseResume(request);
+  const resume = await (await request.post(`/api/resumes/${base.id}/duplicate`, { data: { company: 'Globex', role: 'Platform Engineer' } })).json();
+
+  await page.goto(`/resumes/${resume.id}`);
+  await page.getByRole('button', { name: 'Letter' }).click();
+  await page.waitForURL(/\/letters\/c_/);
+  const letterId = page.url().split('/letters/')[1];
+
+  const preview = page.locator('[data-letter-content]');
+  await expect(preview).toContainText(/RUKAIYA KHAN/i); // header comes from the resume
+  await page.getByLabel('Paragraph 1', { exact: true }).fill('I build reliable backend platforms and would love to do that at Globex.');
+  await page.getByRole('button', { name: 'Add paragraph' }).click();
+  await page.getByLabel('Paragraph 2', { exact: true }).fill('At my last role I cut API latency by 90% with caching.');
+  await expect(preview).toContainText('cut API latency by 90%');
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible({ timeout: 5000 });
+
+  await page.getByRole('button', { name: 'Download PDF' }).click();
+  await expect(page.getByText(/PDF saved in resumes\/week-of-/)).toBeVisible({ timeout: 30_000 });
+  const letter = await (await request.get(`/api/letters/${letterId}`)).json();
+  expect(letter.paragraphs).toHaveLength(2);
+  expect(letter.exports.at(-1).path).toMatch(/\/Khan_Rukaiya_Globex_CoverLetter_\d{4}-\d{2}-\d{2}\.pdf$/);
+  expect(letter.exports.at(-1).pages).toBe(1);
+  expect(existsSync(path.join(HOME, 'resumes', letter.exports.at(-1).path))).toBe(true);
+
+  // Opening the letter again from the resume reuses the same one.
+  const again = await (await request.post('/api/letters', { data: { resumeId: resume.id } })).json();
+  expect(again.id).toBe(letterId);
+  expect(errors).toEqual([]);
+});

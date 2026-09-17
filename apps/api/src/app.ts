@@ -5,10 +5,12 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import {
+  CoverLetter,
   JobLink,
   MatchReport,
   Resume,
   Template,
+  blankCoverLetter,
   blankResume,
   classicTemplate,
   exportRelativePath,
@@ -16,8 +18,8 @@ import {
   roleAbbrev,
 } from '@rc/core';
 import { SERVE_WEB, WEB_ORIGIN } from './config';
-import { exportResume, resolveExportPath } from './pdf';
-import { ConflictError, NotFoundError, PATHS, ROOT, resumes, templates } from './store';
+import { exportLetter, exportResume, resolveExportPath } from './pdf';
+import { ConflictError, NotFoundError, PATHS, ROOT, letters, resumes, templates } from './store';
 
 export const app = new Hono().basePath('/api');
 
@@ -75,7 +77,10 @@ app.put('/resumes/:id', async (c) => {
 });
 
 app.delete('/resumes/:id', async (c) => {
-  await resumes.remove(c.req.param('id'));
+  const id = c.req.param('id');
+  await resumes.remove(id);
+  const letter = await letters.forResume(id);
+  if (letter) await letters.remove(letter.id);
   return c.body(null, 204);
 });
 
@@ -168,6 +173,40 @@ app.post('/resumes/:id/score', async (c) => {
   const match = MatchReport.parse({ ...(resume.match ?? {}), keywords, scoredAt: now() });
   return c.json(await resumes.save(withHistory(resume, match, 'rescore')));
 });
+
+// ---------- cover letters (one per resume) ----------
+
+app.get('/letters', async (c) => {
+  const { items, problems } = await letters.list();
+  const resumeId = c.req.query('resumeId');
+  return c.json({ items: resumeId ? items.filter((l) => l.resumeId === resumeId) : items, problems });
+});
+
+/** Returns the resume's letter, creating a starter one if it has none. */
+app.post('/letters', async (c) => {
+  const { resumeId } = z.object({ resumeId: z.string() }).parse(await c.req.json());
+  const resume = await resumes.get(resumeId);
+  const existing = await letters.forResume(resumeId);
+  if (existing) return c.json(existing);
+  return c.json(await letters.save(blankCoverLetter(newId('c'), resume)), 201);
+});
+
+app.get('/letters/:id', async (c) => c.json(await letters.get(c.req.param('id'))));
+
+app.put('/letters/:id', async (c) => {
+  const existing = await letters.get(c.req.param('id'));
+  const incoming = CoverLetter.parse(await c.req.json());
+  return c.json(
+    await letters.save({ ...incoming, id: existing.id, resumeId: existing.resumeId, exports: existing.exports, createdAt: existing.createdAt }),
+  );
+});
+
+app.delete('/letters/:id', async (c) => {
+  await letters.remove(c.req.param('id'));
+  return c.body(null, 204);
+});
+
+app.post('/letters/:id/export', async (c) => c.json(await exportLetter(c.req.param('id'))));
 
 // ---------- templates ----------
 

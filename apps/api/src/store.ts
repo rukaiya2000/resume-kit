@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import {
+  CoverLetter,
   Resume,
   Template,
   TemplateIndex,
@@ -16,6 +17,7 @@ import { HOME } from './config';
 export { ROOT } from './config';
 export const PATHS = {
   resumes: path.join(HOME, 'data', 'resumes'),
+  letters: path.join(HOME, 'data', 'letters'),
   templates: path.join(HOME, 'templates'),
   templateIndex: path.join(HOME, 'templates', 'index.json'),
   output: path.join(HOME, 'resumes'),
@@ -98,6 +100,28 @@ export const resumes = {
     const resume = await this.get(id);
     if (resume.isBase) throw new ConflictError('The Base resume cannot be deleted.');
     await rm(path.join(PATHS.resumes, `${safeId(id)}.json`));
+  },
+};
+
+// ---------- cover letters ----------
+
+export const letters = {
+  list: () => listJson(PATHS.letters, CoverLetter),
+  async get(id: string) {
+    const file = path.join(PATHS.letters, `${safeId(id)}.json`);
+    if (!existsSync(file)) throw new NotFoundError(`Cover letter ${id} not found`);
+    return readJson(file, CoverLetter);
+  },
+  async forResume(resumeId: string) {
+    return (await this.list()).items.find((l) => l.resumeId === resumeId) ?? null;
+  },
+  async save(letter: CoverLetter) {
+    const parsed = CoverLetter.parse({ ...letter, updatedAt: new Date().toISOString() });
+    await writeJson(path.join(PATHS.letters, `${safeId(parsed.id)}.json`), parsed);
+    return parsed;
+  },
+  async remove(id: string) {
+    await rm(path.join(PATHS.letters, `${safeId(id)}.json`));
   },
 };
 

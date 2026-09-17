@@ -8,6 +8,7 @@ Run: `uv run server.py` (stdio). `uv run server.py --setup-vault` scaffolds the 
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -1006,6 +1007,106 @@ async def save_weekly_review(
     path.parent.mkdir(exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return str(path)
+
+
+# ---------- cover letters (rules: knowledge/cover-letter-style.md, guardrails.md) ----------
+
+NUMBER = re.compile(r"\d[\d,.]*\s*(?:%|\+|k\b)?", re.I)
+
+
+def _digits(text: str) -> str:
+    return re.sub(r"[\s,]", "", text.lower())
+
+
+def check_cover_letter(paragraphs: list[str], base: Resume) -> list[str]:
+    lim, problems = limits(), []
+    body = [p for p in paragraphs if p.strip()]
+    if not lim["cover_letter_min_paragraphs"] <= len(body) <= lim["cover_letter_max_paragraphs"]:
+        problems.append(f"use {lim['cover_letter_min_paragraphs']}–{lim['cover_letter_max_paragraphs']} paragraphs.")
+    if (words := sum(len(p.split()) for p in body)) > lim["cover_letter_max_words"]:
+        problems.append(f"{words} words; keep it under {lim['cover_letter_max_words']}.")
+    # Every number must come from a fact source (hidden resume sections count: they're still true).
+    sources = _digits(
+        "\n".join([json.dumps(base, ensure_ascii=False), extra_facts(), *(p["body"] for p in project_notes())])
+    )
+    unknown = sorted(
+        {m.group(0).strip() for p in body for m in NUMBER.finditer(p) if _digits(m.group(0)) not in sources}
+    )
+    if unknown:
+        problems.append(
+            f"numbers not found in the resume or notes: {', '.join(unknown)}. Use the source's figures exactly."
+        )
+    return problems
+
+
+class LetterResult(BaseModel):
+    letter_id: str
+    editor: str
+    words: int
+    pdf: str | None
+    pages: int | None
+
+
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=False, idempotentHint=True))
+async def save_cover_letter(
+    job: str,
+    paragraphs: Annotated[list[str], Field(description="Body paragraphs, in order")],
+    ctx: Context,
+    greeting: str = "Dear Hiring Manager,",
+    closing: str = "Sincerely,",
+    recipient_name: str = "",
+    recipient_title: str = "",
+    export: bool = True,
+) -> LetterResult:
+    """Save the job's cover letter in the app (same header and design as its tailored resume) and export the PDF.
+
+    Rejects letters that break the cover letter limits or use numbers not found in the fact sources.
+    Style: resume://knowledge/cover-letter-style."""
+    note = find_job(job)
+    if not (resume_id := note.get("resume_id")):
+        raise ToolError(
+            f'"{note.id}" has no tailored resume yet. Tailor it first; the letter reuses its header and design.'
+        )
+    if problems := check_cover_letter(paragraphs, await base_resume(ctx)):
+        raise ToolError("Not saved. Fix and call again:\n- " + "\n- ".join(problems))
+
+    letter = await api(ctx, "POST", "/letters", {"resumeId": resume_id})
+    letter |= {
+        "company": note.company,
+        "role": note.role,
+        "recipient": letter["recipient"] | {"name": recipient_name, "title": recipient_title, "company": note.company},
+        "greeting": greeting,
+        "paragraphs": [p.strip() for p in paragraphs if p.strip()],
+        "closing": closing,
+        "source": "ai",
+    }
+    letter = await api(ctx, "PUT", f"/letters/{letter['id']}", letter)
+
+    pdf = pages = None
+    if export:
+        await ctx.report_progress(0, 1, "Rendering cover letter PDF")
+        result = await api(ctx, "POST", f"/letters/{letter['id']}/export")
+        await ctx.report_progress(1, 1, "Done")
+        pdf, pages = result["path"], result["pages"]
+    state = app(ctx)
+    write_note(
+        note,
+        {"cover_letter_id": letter["id"]}
+        | ({"cover_letter_file": Path(pdf).name, "cover_letter_pdf": state.pdf_url(pdf)} if pdf else {}),
+    )
+    return LetterResult(
+        letter_id=letter["id"],
+        editor=f"{state.web}/letters/{letter['id']}",
+        words=sum(len(p.split()) for p in letter["paragraphs"]),
+        pdf=pdf,
+        pages=pages,
+    )
+
+
+@mcp.prompt(title="Write a cover letter")
+def write_cover_letter(job: str) -> str:
+    """Draft a cover letter that matches the job's tailored resume, from the same facts."""
+    return fill(md("prompts", "write-cover-letter.md"), job=job)
 
 
 class StatusResult(BaseModel):

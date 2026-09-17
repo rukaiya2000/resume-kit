@@ -1,10 +1,12 @@
 import type { Design, Resume } from '@rc/core';
 import { ResumeDocument, pageMetrics, type FitResult } from '@rc/core/render';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from './ui';
 
 interface ScaledPageProps {
-  resume: Pick<Resume, 'sections'>;
+  resume?: Pick<Resume, 'sections'>;
+  /** Render this document instead of a resume (e.g. a cover letter). It should use the same `design`. */
+  document?: ReactNode;
   design: Design;
   /** Fixed scale; when omitted the page scales to the container width. */
   scale?: number;
@@ -20,7 +22,7 @@ interface ScaledPageProps {
 }
 
 /** A resume page drawn at real size and scaled with a CSS transform, so layout (and fit) is unaffected by zoom. */
-export function ScaledPage({ resume, design, scale, clip, showPageEnd, selectedSectionId, onSectionClick, onFit, className, style, links = false }: ScaledPageProps) {
+export function ScaledPage({ resume, document: doc, design, scale, clip, showPageEnd, selectedSectionId, onSectionClick, onFit, className, style, links = false }: ScaledPageProps) {
   const holder = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const metrics = pageMetrics(design);
@@ -53,7 +55,7 @@ export function ScaledPage({ resume, design, scale, clip, showPageEnd, selectedS
       style={{ width: scale !== undefined ? metrics.widthPx * k : '100%', height, ...style }}
     >
       <div ref={inner} style={{ transform: `scale(${k})`, transformOrigin: '0 0', width: metrics.widthPx, position: 'absolute', top: 0, left: 0 }}>
-        <ResumeDocument resume={resume} design={design} selectedSectionId={selectedSectionId} onSectionClick={onSectionClick} onFit={onFit} links={links} />
+        {doc ?? (resume && <ResumeDocument resume={resume} design={design} selectedSectionId={selectedSectionId} onSectionClick={onSectionClick} onFit={onFit} links={links} />)}
       </div>
       {showPageEnd && contentHeight > metrics.heightPx + 1 && (
         <div className="pointer-events-none absolute right-0 left-0 border-t-2 border-dashed border-red-500" style={{ top: metrics.heightPx * k }}>

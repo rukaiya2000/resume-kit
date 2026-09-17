@@ -18,6 +18,9 @@ Change a value here and the server uses it after a restart. Keys are read from t
 | `min_jd_words` | 30 | A job note needs at least this many words of job description |
 | `target_must_have_coverage` | 80 | Aim for this % of must-have keywords before stopping |
 | `max_retries` | 2 | Rewrite attempts to raise coverage before accepting gaps |
+| `cover_letter_min_paragraphs` | 3 | Fewest paragraphs in a cover letter |
+| `cover_letter_max_paragraphs` | 5 | Most paragraphs in a cover letter |
+| `cover_letter_max_words` | 350 | Longest cover letter (body paragraphs) |
 
 ## Fact rules (enforced)
 
@@ -25,6 +28,7 @@ Change a value here and the server uses it after a restart. Keys are read from t
 2. **Projects** must come from the Base resume (by entry id) or an Obsidian project note (by title). No new projects.
 3. **Experience** entries are the Base resume's; company, title, location and dates can't change, only bullets and visibility.
 4. **Fixed sections** (Basic Info, Education, Awards & Activities) are copied from the Base resume and never edited.
+5. **Cover letter numbers** (percentages, counts like 30+ or 20k, years of experience) must appear in a fact source. A letter needs a tailored resume first.
 
 ## Honesty rules (followed by Claude, checked in review)
 

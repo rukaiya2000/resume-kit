@@ -1,4 +1,4 @@
-import type { Resume, Template } from '@rc/core';
+import type { CoverLetter, Resume, Template } from '@rc/core';
 
 export class ApiError extends Error {
   constructor(
@@ -55,6 +55,15 @@ export const api = {
   rescoreResume: (id: string) => request<Resume>('POST', `/resumes/${id}/score`),
   exportName: (name: string, company: string) =>
     request<{ path: string; file: string }>('GET', `/export-name?name=${encodeURIComponent(name)}&company=${encodeURIComponent(company)}`),
+
+  letters: (resumeId?: string) =>
+    request<{ items: CoverLetter[] }>('GET', `/letters${resumeId ? `?resumeId=${encodeURIComponent(resumeId)}` : ''}`),
+  /** The resume's cover letter, created on first use. */
+  ensureLetter: (resumeId: string) => request<CoverLetter>('POST', '/letters', { resumeId }),
+  letter: (id: string) => request<CoverLetter>('GET', `/letters/${id}`),
+  saveLetter: (letter: CoverLetter) => request<CoverLetter>('PUT', `/letters/${letter.id}`, letter),
+  deleteLetter: (id: string) => request<void>('DELETE', `/letters/${id}`),
+  exportLetter: (id: string) => request<ExportResult>('POST', `/letters/${id}/export`),
 
   templates: () => request<TemplateList>('GET', '/templates'),
   template: (id: string) => request<Template>('GET', `/templates/${id}`),

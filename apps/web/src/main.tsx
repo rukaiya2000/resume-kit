@@ -7,7 +7,8 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import { Toaster } from 'sonner';
 import { DashboardPage } from './pages/Dashboard';
 import { EditorPage } from './editor/EditorPage';
-import { PrintPage } from './pages/PrintPage';
+import { LetterEditorPage } from './pages/LetterEditor';
+import { PrintLetterPage, PrintPage } from './pages/PrintPage';
 import { TemplatesPage } from './pages/Templates';
 import { WebViewPage } from './pages/WebView';
 
@@ -20,6 +21,8 @@ const router = createBrowserRouter([
   { path: '/templates', element: <TemplatesPage /> },
   { path: '/resumes/:id', element: <EditorPage mode="resume" /> },
   { path: '/templates/:id/design', element: <EditorPage mode="template" /> },
+  { path: '/letters/:id', element: <LetterEditorPage /> },
+  { path: '/print/letter/:id', element: <PrintLetterPage /> },
   { path: '/print/:id', element: <PrintPage /> },
   { path: '/r/:id', element: <WebViewPage /> },
 ]);

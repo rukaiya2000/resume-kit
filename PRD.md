@@ -1,6 +1,6 @@
 # PRD: Resume Creator
 
-**Status:** Phase 1 built (Must items); Phase 2 built; cover letters and peer review open · **Owner:** Rukaiya Khan · **Date:** 2026-09-16
+**Status:** Phase 1 and Phase 2 built, plus cover letters; peer review open · **Owner:** Rukaiya Khan · **Date:** 2026-09-16
 
 | Phase | Scope |
 |---|---|
@@ -12,7 +12,7 @@ Phase 1 is built so Phase 2 only **adds** things: AI writes the same resume JSON
 
 ## Implementation notes (Phase 1 as built, 2026-09-16)
 - **Built:** everything marked Must in §3/§8, plus the local web view (F13).
-- **Not built yet:** cover letters (F12, Should), peer review (F14, Later).
+- **Not built yet:** peer review (F14, Later). Cover letters (F12) were added later: one per resume, sharing its header and design, with AI drafting.
 - **Changed from the plan:**
   - Bullet formatting uses Markdown-style markers (`**bold**`, `*italic*`, `[text](url)`) with ⌘B/⌘I/⌘K and toolbar buttons, instead of Tiptap. It's lighter and the stored text stays plain.
   - React Router instead of TanStack Router.

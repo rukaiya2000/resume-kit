@@ -253,5 +253,25 @@ export const Resume = z.object({
 });
 export type Resume = z.infer<typeof Resume>;
 
+/** A cover letter belongs to one resume and reuses its header and design, so the two match. */
+export const CoverLetter = z.object({
+  id: z.string(),
+  schemaVersion: z.literal(1),
+  resumeId: z.string(),
+  company: z.string(),
+  role: z.string(),
+  date: z.string(), // YYYY-MM-DD
+  recipient: z.object({ name: z.string(), title: z.string(), company: z.string(), address: z.string() }),
+  greeting: z.string(),
+  paragraphs: z.array(z.string()),
+  closing: z.string(),
+  signature: z.string(),
+  source: z.enum(['manual', 'ai']),
+  exports: z.array(ExportRecord),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CoverLetter = z.infer<typeof CoverLetter>;
+
 export const TemplateIndex = z.object({ defaultTemplateId: z.string() });
 export type TemplateIndex = z.infer<typeof TemplateIndex>;

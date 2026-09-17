@@ -11,6 +11,7 @@ import {
   FileJson,
   FolderOpen,
   Globe,
+  Mail,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -318,6 +319,17 @@ function ResumeCard({ resume, templates, defaultId, onDuplicate }: { resume: Res
                 Rename
               </DropdownItem>
               <DropdownSeparator />
+              <DropdownItem
+                icon={<Mail size={15} />}
+                onSelect={() =>
+                  api
+                    .ensureLetter(resume.id)
+                    .then((l) => navigate(`/letters/${l.id}`))
+                    .catch((e) => toast.error(errorMessage(e)))
+                }
+              >
+                Cover letter
+              </DropdownItem>
               <DropdownItem icon={<Download size={15} />} onSelect={exportNow}>
                 Download PDF
               </DropdownItem>

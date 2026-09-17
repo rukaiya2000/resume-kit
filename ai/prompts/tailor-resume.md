@@ -21,3 +21,4 @@ Read these first (they are MCP resources):
 7. **Export.** Call `export_resume`. If it's over one page, cut following the one-page order in the writing style guide, then save and export again. If `pdf_check` reports unreadable text, tell the user.
 8. **Review.** Follow the `review_match` prompt (`resume://prompts/review-match`) and call `save_match_report`. The report also records a Base-vs-tailored diff and the PDF check automatically.
 9. **Report back** in a few lines: score and must-have coverage, the PDF path, what you emphasized, the real gaps, and any skills added to the dictionary.
+10. **Offer a cover letter** if the job asks for one or the user wants it: follow `resume://prompts/write-cover-letter`.

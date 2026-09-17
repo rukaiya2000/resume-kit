@@ -219,3 +219,18 @@ def test_mark_job_applied_sets_dates_and_tracker_template_is_valid_yaml(server):
     clipper = __import__("json").loads(server.md("templates", "web-clipper-job.json"))
     assert clipper["behavior"] == "create" and clipper["path"] == "Jobs"
     assert {p["type"] for p in clipper["properties"]} <= {"text", "multitext", "number", "checkbox", "date", "datetime"}
+
+
+def test_cover_letter_guardrails_check_length_and_numbers(server):
+    base = resume(["Python"], ["Cut API response times by 90% for 30+ tenants"])
+    ok = [
+        "I build backend platforms and would like to do that at Acme.",
+        "At my last company I cut API response times by 90% for 30+ tenants.",
+        "I'd love to talk about how that experience fits your team.",
+    ]
+    assert server.check_cover_letter(ok, base) == []
+    invented = [*ok[:2], "I also grew revenue by 45% and led 12 engineers."]
+    problems = " ".join(server.check_cover_letter(invented, base))
+    assert "45%" in problems and "12" in problems and "90%" not in problems
+    assert "paragraphs" in " ".join(server.check_cover_letter(ok[:2], base))
+    assert "words" in " ".join(server.check_cover_letter([*ok, "word " * 400], base))

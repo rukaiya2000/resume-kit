@@ -1,5 +1,6 @@
+import { format } from 'date-fns';
 import { DEFAULT_DESIGN } from './design';
-import type { Resume, Section, SectionType, Template } from './schema';
+import type { CoverLetter, Resume, Section, SectionType, Template } from './schema';
 import { newEntry, newSection } from './sectionTypes';
 
 export const DEFAULT_SECTION_ORDER: SectionType[] = ['basics', 'education', 'skills', 'employment', 'projects', 'awards'];
@@ -131,5 +132,28 @@ export function sampleBaseResume(id: string, now = new Date().toISOString()): Re
     source: 'manual',
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+/** A starter letter for a resume: recipient and greeting from the job, signature from the resume header. */
+export function blankCoverLetter(id: string, resume: Resume, now = new Date()): CoverLetter {
+  const name = resume.sections.find((s) => s.type === 'basics')?.basics?.name ?? '';
+  const iso = now.toISOString();
+  return {
+    id,
+    schemaVersion: 1,
+    resumeId: resume.id,
+    company: resume.company,
+    role: resume.role,
+    date: format(now, 'yyyy-MM-dd'), // local date, matching the PDF file name
+    recipient: { name: '', title: '', company: resume.company, address: '' },
+    greeting: 'Dear Hiring Manager,',
+    paragraphs: [''],
+    closing: 'Sincerely,',
+    signature: name,
+    source: 'manual',
+    exports: [],
+    createdAt: iso,
+    updatedAt: iso,
   };
 }
