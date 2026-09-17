@@ -6,10 +6,13 @@ A local, Creddle-style resume builder. Edit content and design in the browser, k
 
 ```bash
 pnpm setup      # once: install dependencies, Chromium for PDF export, and the Python env (uv)
-pnpm dev        # UI on http://localhost:5173, API on 127.0.0.1:8797
+pnpm start      # everything on one port: http://127.0.0.1:8790
+pnpm dev        # while developing: UI with hot reload on http://localhost:5173, API on 127.0.0.1:8797
 ```
 
 On first start the API creates the `classic` template and a sample Base resume.
+
+**Start at login (macOS):** `pnpm login-item:install` runs `pnpm start` in the background at every login. Because the project is in `~/Documents`, macOS requires one manual step: give the Node binary it prints **Full Disk Access** (System Settings → Privacy & Security → Full Disk Access). `pnpm login-item:remove` undoes it; `bash scripts/login-item.sh status` shows whether it's running.
 
 ## Tailor a resume to a job (AI, Phase 2)
 
@@ -42,11 +45,13 @@ The preview and the PDF use the same component and bundled fonts, so what you se
 
 ```bash
 pnpm test        # TypeScript unit tests + Python tests (ai/)
+pnpm test:e2e    # browser tests on an isolated server (port 8890, data in e2e/.home)
+pnpm lint:py     # ruff
 pnpm typecheck   # all packages
 pnpm build       # production build of the UI
 ```
 
-`API_PORT` and `WEB_ORIGIN` env vars override the defaults if those ports are taken.
+`API_PORT`, `WEB_ORIGIN` and `RC_HOME` (data folder) override the defaults. CI (`.github/workflows/ci.yml`) runs typecheck, lint, unit and browser tests.
 
 ## Editor shortcuts
 

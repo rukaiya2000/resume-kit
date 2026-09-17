@@ -15,6 +15,7 @@ import {
   newId,
   roleAbbrev,
 } from '@rc/core';
+import { SERVE_WEB, WEB_ORIGIN } from './config';
 import { exportResume, resolveExportPath } from './pdf';
 import { ConflictError, NotFoundError, PATHS, ROOT, resumes, templates } from './store';
 
@@ -29,6 +30,9 @@ app.onError((err, c) => {
 });
 
 const now = () => new Date().toISOString();
+
+/** Lets other tools (the Python MCP server) find the UI and output folder for whichever mode is running. */
+app.get('/info', (c) => c.json({ webOrigin: SERVE_WEB ? new URL(c.req.url).origin : WEB_ORIGIN, output: PATHS.output, mode: SERVE_WEB ? 'start' : 'dev' }));
 
 // ---------- resumes ----------
 
@@ -45,7 +49,7 @@ app.post('/resumes', async (c) => {
 
 app.post('/resumes/import', async (c) => {
   const raw = await c.req.json();
-  const parsed = Resume.parse({ ...raw, id: newId('r'), isBase: false, exports: [], createdAt: now(), updatedAt: now() });
+  const parsed = Resume.parse({ ...raw, id: newId('r'), isBase: false, exports: [], matchHistory: [], createdAt: now(), updatedAt: now() });
   return c.json(await resumes.save(parsed), 201);
 });
 
@@ -64,6 +68,7 @@ app.put('/resumes/:id', async (c) => {
       exports: existing.exports,
       job: existing.job,
       match: existing.match,
+      matchHistory: existing.matchHistory,
       createdAt: existing.createdAt,
     }),
   );
@@ -101,6 +106,7 @@ app.post('/resumes/:id/duplicate', async (c) => {
     source: body.job ? 'ai' : 'manual',
     job: body.job,
     match: undefined,
+    matchHistory: [],
     createdAt: now(),
     updatedAt: now(),
   };
@@ -121,10 +127,16 @@ app.get('/export-name', (c) => {
 
 app.post('/resumes/:id/export', async (c) => c.json(await exportResume(c.req.param('id'))));
 
+function withHistory(resume: Resume, match: MatchReport, source: 'ai' | 'rescore'): Resume {
+  const k = match.keywords;
+  const entry = { score: k.score, mustHaveMatched: k.mustHave.matched, mustHaveTotal: k.mustHave.total, at: match.scoredAt, source };
+  return { ...resume, match, matchHistory: [...resume.matchHistory, entry].slice(-50) };
+}
+
 app.put('/resumes/:id/match', async (c) => {
   const resume = await resumes.get(c.req.param('id'));
   const match = MatchReport.parse(await c.req.json());
-  return c.json(await resumes.save({ ...resume, match }));
+  return c.json(await resumes.save(withHistory(resume, match, 'ai')));
 });
 
 /** Keyword scoring lives in the Python AI package (ai/scoring.py); this runs it as a one-shot process. */
@@ -154,7 +166,7 @@ app.post('/resumes/:id/score', async (c) => {
   if (!resume.job?.description) throw new ConflictError('This resume has no job description to score against.');
   const keywords = await pythonKeywordMatch({ jobDescription: resume.job.description, jobTitle: resume.job.title, resume });
   const match = MatchReport.parse({ ...(resume.match ?? {}), keywords, scoredAt: now() });
-  return c.json(await resumes.save({ ...resume, match }));
+  return c.json(await resumes.save(withHistory(resume, match, 'rescore')));
 });
 
 // ---------- templates ----------

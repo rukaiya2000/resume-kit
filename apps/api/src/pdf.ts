@@ -4,9 +4,8 @@ import path from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
 import { exportRelativePath, type Resume } from '@rc/core';
+import { WEB_ORIGIN } from './config';
 import { PATHS, resumes } from './store';
-
-const WEB_ORIGIN = process.env.WEB_ORIGIN ?? 'http://localhost:5173';
 
 let browserPromise: Promise<Browser> | null = null;
 function browser() {

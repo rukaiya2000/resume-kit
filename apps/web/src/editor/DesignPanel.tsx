@@ -202,6 +202,29 @@ export function DesignPanel() {
           <Row label="Bullet" path={['entry', 'bullet']}>
             <Toggle label="Bullet symbol" value={d.entry.bullet} onChange={(v) => set(['entry', 'bullet'], v)} options={['•', '–', '▪', '◦'].map((s) => ({ value: s, label: s }))} />
           </Row>
+          <Row label="Skill separator" path={['entry', 'skillSeparator']}>
+            <Toggle
+              label="Skill separator"
+              value={d.entry.skillSeparator}
+              onChange={(v) => set(['entry', 'skillSeparator'], v)}
+              options={[
+                { value: ', ', label: 'a, b' },
+                { value: ' • ', label: 'a • b' },
+                { value: ' | ', label: 'a | b' },
+              ]}
+            />
+          </Row>
+          <Row label="Award description" path={['entry', 'awardDescription']}>
+            <Toggle
+              label="Award description position"
+              value={d.entry.awardDescription}
+              onChange={(v) => set(['entry', 'awardDescription'], v)}
+              options={[
+                { value: 'inline', label: 'Inline' },
+                { value: 'below', label: 'Own line' },
+              ]}
+            />
+          </Row>
           <Row label="Bold titles" path={['entry', 'titleBold']}>
             <Switch label="Bold entry titles" checked={d.entry.titleBold} onCheckedChange={(v) => set(['entry', 'titleBold'], v)} />
           </Row>

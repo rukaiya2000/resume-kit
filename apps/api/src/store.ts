@@ -1,7 +1,6 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   Resume,
   Template,
@@ -12,12 +11,14 @@ import {
 } from '@rc/core';
 import type { z } from 'zod';
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+import { HOME } from './config';
+
+export { ROOT } from './config';
 export const PATHS = {
-  resumes: path.join(ROOT, 'data', 'resumes'),
-  templates: path.join(ROOT, 'templates'),
-  templateIndex: path.join(ROOT, 'templates', 'index.json'),
-  output: path.join(ROOT, 'resumes'),
+  resumes: path.join(HOME, 'data', 'resumes'),
+  templates: path.join(HOME, 'templates'),
+  templateIndex: path.join(HOME, 'templates', 'index.json'),
+  output: path.join(HOME, 'resumes'),
 };
 
 export class NotFoundError extends Error {}

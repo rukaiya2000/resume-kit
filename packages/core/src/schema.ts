@@ -71,6 +71,9 @@ export const Design = z.object({
     dateFormat: z.enum(['MMM yyyy', 'MMMM yyyy', 'MM/yyyy', 'yyyy']),
     titleBold: z.boolean(),
     subtitleItalic: z.boolean(),
+    // Added after v1 templates were saved: defaults keep older template files valid.
+    skillSeparator: z.enum([', ', ' • ', ' | ']).default(', '),
+    awardDescription: z.enum(['inline', 'below']).default('inline'),
   }),
   sectionOverrides: z.record(z.string(), SectionOverride),
   fit: z.object({
@@ -179,6 +182,15 @@ export const MatchReport = z.object({
 });
 export type MatchReport = z.infer<typeof MatchReport>;
 
+export const MatchHistoryEntry = z.object({
+  score: z.number(),
+  mustHaveMatched: z.number(),
+  mustHaveTotal: z.number(),
+  at: z.string(),
+  source: z.enum(['ai', 'rescore']),
+});
+export type MatchHistoryEntry = z.infer<typeof MatchHistoryEntry>;
+
 /** The job a tailored resume was made for (Phase 2). */
 export const JobLink = z.object({
   /** Path of the job note inside the Obsidian vault, e.g. "Jobs/Google - MLE.md". */
@@ -205,6 +217,7 @@ export const Resume = z.object({
   source: z.enum(['manual', 'ai']),
   job: JobLink.optional(),
   match: MatchReport.optional(),
+  matchHistory: z.array(MatchHistoryEntry).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

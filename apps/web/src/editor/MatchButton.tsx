@@ -1,4 +1,4 @@
-import type { MatchReport } from '@rc/core';
+import type { MatchHistoryEntry, MatchReport } from '@rc/core';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ExternalLink, RefreshCw, Target } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -30,7 +30,7 @@ export function MatchButton() {
       // The match is server-owned: update it without creating an undo step or a save.
       const temporal = useEditor.temporal.getState();
       temporal.pause();
-      useEditor.setState((s) => ({ resume: s.resume ? { ...s.resume, match: updated.match } : s.resume }));
+      useEditor.setState((s) => ({ resume: s.resume ? { ...s.resume, match: updated.match, matchHistory: updated.matchHistory } : s.resume }));
       temporal.resume();
       invalidate.resumes();
       toast.success(`Keyword score: ${updated.match?.keywords.score ?? '—'}/100`);
@@ -75,16 +75,17 @@ export function MatchButton() {
           </>
         }
       >
-        {match ? <MatchBody match={match} /> : null}
+        {match ? <MatchBody match={match} history={resume.matchHistory} /> : null}
       </Dialog>
     </>
   );
 }
 
-function MatchBody({ match }: { match: MatchReport }) {
+function MatchBody({ match, history }: { match: MatchReport; history: MatchHistoryEntry[] }) {
   const k = match.keywords;
   return (
     <div className="flex max-h-[58vh] flex-col gap-5 overflow-y-auto pr-1 text-sm">
+      {history.length > 1 && <History history={history} />}
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Keyword score" value={`${k.score}`} suffix="/100" tone={scoreTone(k.score)} />
         <Stat label="Must-have" value={`${k.mustHave.matched}/${k.mustHave.total}`} tone={scoreTone(k.mustHave.total ? (100 * k.mustHave.matched) / k.mustHave.total : 100)} />
@@ -141,6 +142,37 @@ function MatchBody({ match }: { match: MatchReport }) {
         </Block>
       )}
     </div>
+  );
+}
+
+function History({ history }: { history: MatchHistoryEntry[] }) {
+  const recent = history.slice(-12);
+  const w = 160;
+  const h = 36;
+  const x = (i: number) => (recent.length === 1 ? w / 2 : (i / (recent.length - 1)) * w);
+  const y = (score: number) => h - 3 - (score / 100) * (h - 6);
+  const points = recent.map((e, i) => `${x(i)},${y(e.score)}`).join(' ');
+  const first = recent[0].score;
+  const last = recent.at(-1)!.score;
+  return (
+    <section className="flex items-center gap-4 rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3">
+      <svg width={w} height={h} role="img" aria-label={`Score trend from ${first} to ${last}`} className="shrink-0 overflow-visible">
+        <polyline points={points} fill="none" stroke="var(--color-accent-500)" strokeWidth={2} strokeLinejoin="round" />
+        {recent.map((e, i) => (
+          <circle key={i} cx={x(i)} cy={y(e.score)} r={2.5} fill={e.source === 'ai' ? 'var(--color-accent-500)' : '#fff'} stroke="var(--color-accent-500)" />
+        ))}
+      </svg>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-xs text-zinc-500">Score history ({history.length} runs · filled = /resume, hollow = Re-score)</span>
+        <span className="truncate font-medium tabular-nums">
+          {recent.map((e) => e.score).join(' → ')}
+          <span className={cn('ml-2 text-xs', last >= first ? 'text-emerald-700' : 'text-red-600')}>
+            {last >= first ? '+' : ''}
+            {last - first}
+          </span>
+        </span>
+      </div>
+    </section>
   );
 }
 

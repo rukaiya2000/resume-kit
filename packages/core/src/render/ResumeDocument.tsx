@@ -332,7 +332,24 @@ function EntryBlock({ entry, section, design: d, links }: { entry: Entry; sectio
     return (
       <div>
         {entry.title && <span style={titleStyle}>{entry.title}: </span>}
-        {entry.items.filter(Boolean).join(', ')}
+        {entry.items.filter(Boolean).join(d.entry.skillSeparator)}
+      </div>
+    );
+  }
+
+  if (cfg.compact && d.entry.awardDescription === 'below') {
+    return (
+      <div>
+        <Row
+          left={
+            <span>
+              <span style={titleStyle}>{title}</span>
+              {entry.subtitle && <span>, {entry.subtitle}</span>}
+            </span>
+          }
+          right={dates && <span style={metaStyle}>{dates}</span>}
+        />
+        {entry.description && <div>{renderInline(entry.description, d.colors.accent, links)}</div>}
       </div>
     );
   }

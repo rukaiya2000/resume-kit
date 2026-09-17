@@ -31,9 +31,10 @@ from scoring import KeywordMatch, camel, keyword_match, plain, resume_to_text
 HERE = Path(__file__).parent
 ROOT = HERE.parent
 VAULT = Path(os.environ.get("VAULT_DIR", Path.home() / "Documents" / "Obsidian Vault"))
-API_URL = os.environ.get("API_URL", f"http://127.0.0.1:{os.environ.get('API_PORT', '8797')}/api")
-WEB_URL = os.environ.get("WEB_ORIGIN", "http://localhost:5173")
-OUTPUT = ROOT / "resumes"
+# An explicit API_URL, else `pnpm start` (one port) and then `pnpm dev`.
+API_URLS = (
+    [os.environ["API_URL"]] if "API_URL" in os.environ else ["http://127.0.0.1:8790/api", "http://127.0.0.1:8797/api"]
+)
 BLOCK_START, BLOCK_END = "<!-- resume-creator:start -->", "<!-- resume-creator:end -->"
 FIXED_STATUSES = {"applied", "interview", "offer", "rejected", "skip"}
 
@@ -173,27 +174,59 @@ def write_note(note: JobNote, meta: dict[str, Any], block: str | None = None) ->
 
 
 @dataclass(slots=True)
-class AppState:
+class App:
+    """The running resume app, found on first use (and again after it restarts in another mode)."""
+
     http: httpx.AsyncClient
+    base: str = ""
+    web: str = ""
+    output: Path = ROOT / "resumes"
+
+    async def connect(self) -> None:
+        if self.base:
+            return
+        for url in API_URLS:
+            try:
+                info = (await self.http.get(f"{url}/info", timeout=2)).raise_for_status().json()
+            except httpx.HTTPError:
+                continue
+            self.base, self.output = url, Path(info["output"])
+            self.web = os.environ.get("WEB_ORIGIN", info["webOrigin"])
+            return
+        raise ToolError("The resume app isn't running. Start it with `pnpm start` (or `pnpm dev`), then try again.")
+
+    def pdf_url(self, rel: str) -> str:
+        return (self.output / rel).as_uri()
 
 
 @asynccontextmanager
-async def lifespan(_: MCPServer) -> AsyncIterator[AppState]:
-    async with httpx.AsyncClient(base_url=API_URL, timeout=90) as http:
-        yield AppState(http)
+async def lifespan(_: MCPServer) -> AsyncIterator[App]:
+    async with httpx.AsyncClient(timeout=90) as http:
+        yield App(http)
 
 
-async def api(ctx: Context, method: str, path: str, body: Any = None) -> Any:
-    http: httpx.AsyncClient = ctx.request_context.lifespan_context.http
+def app(ctx: Context) -> App:
+    return ctx.request_context.lifespan_context
+
+
+async def call(state: App, method: str, path: str, body: Any = None) -> Any:
+    await state.connect()
+    # The API treats absent and null differently; send absent.
+    payload = {k: v for k, v in body.items() if v is not None} if isinstance(body, dict) else body
     try:
-        # The API treats absent and null differently; send absent.
-        payload = {k: v for k, v in body.items() if v is not None} if isinstance(body, dict) else body
-        res = await http.request(method, path, json=payload)
+        res = await state.http.request(method, f"{state.base}{path}", json=payload)
     except httpx.ConnectError as err:
-        raise ToolError(f"The resume app isn't running ({API_URL}). Start it with `pnpm dev`, then try again.") from err
+        state.base = ""
+        raise ToolError(
+            "Lost the connection to the resume app. Is `pnpm start` (or `pnpm dev`) still running?"
+        ) from err
     if res.is_error:
         raise ToolError(f"API {method} {path} failed ({res.status_code}): {res.json().get('error', res.text)}")
     return res.json() if res.content else None
+
+
+async def api(ctx: Context, method: str, path: str, body: Any = None) -> Any:
+    return await call(app(ctx), method, path, body)
 
 
 async def base_resume(ctx: Context) -> Resume:
@@ -209,10 +242,6 @@ def section(resume: Resume, kind: str) -> dict[str, Any] | None:
 
 def entries(resume: Resume, kind: str) -> list[dict[str, Any]]:
     return (section(resume, kind) or {"entries": []})["entries"]
-
-
-def pdf_url(rel: str) -> str:
-    return (OUTPUT / rel).as_uri()
 
 
 # ---------- tool models ----------
@@ -654,7 +683,7 @@ async def save_tailored_resume(
     return SaveResult(
         resume_id=saved["id"],
         updated_existing=bool(existing_id and existing_id == saved["id"]),
-        editor=f"{WEB_URL}/resumes/{saved['id']}",
+        editor=f"{app(ctx).web}/resumes/{saved['id']}",
         keywords=kw,
         must_have_coverage=coverage,
         next_step="Call export_resume to render the PDF and check it fits one page.",
@@ -672,7 +701,7 @@ async def export_resume(resume_id: str, ctx: Context) -> ExportResult:
         path=result["path"],
         pages=result["pages"],
         fits_one_page=fits,
-        file_url=pdf_url(result["path"]),
+        file_url=app(ctx).pdf_url(result["path"]),
         next_step="Call save_match_report."
         if fits
         else "Over one page even at minimum scale: cut per the writing style guide, save and export again.",
@@ -700,10 +729,13 @@ async def save_match_report(
         }
     )
     resume = await api(ctx, "PUT", f"/resumes/{resume_id}/match", match)
+    state = app(ctx)
     last = resume["exports"][-1]["path"] if resume["exports"] else None
 
     links = " · ".join(
-        filter(None, [last and f"[Open PDF]({pdf_url(last)})", f"[Open in editor]({WEB_URL}/resumes/{resume_id})"])
+        filter(
+            None, [last and f"[Open PDF]({state.pdf_url(last)})", f"[Open in editor]({state.web}/resumes/{resume_id})"]
+        )
     )
     table = (
         "\n".join(
@@ -742,11 +774,12 @@ async def save_match_report(
             "status": status,
             "resume_id": resume_id,
             "resume_file": last and Path(last).name,
-            "resume_pdf": last and pdf_url(last),
+            "resume_pdf": last and state.pdf_url(last),
             "generated_at": date.today().isoformat(),
             "match_score": kw.score,
             "must_have_coverage": f"{kw.must_have.matched}/{kw.must_have.total}",
             "missing_keywords": kw.missing_required,
+            "score_history": [e["score"] for e in resume.get("matchHistory", [])],
         },
         block,
     )
@@ -759,9 +792,9 @@ if __name__ == "__main__":
     if "--setup-vault" in sys.argv:
 
         async def _main() -> None:
-            async with httpx.AsyncClient(base_url=API_URL) as http:
-                res = await http.get("/resumes")
-                base = next(r for r in res.json()["items"] if r["isBase"])
+            async with httpx.AsyncClient(timeout=30) as http:
+                resumes = await call(App(http), "GET", "/resumes")
+            base = next(r for r in resumes["items"] if r["isBase"])
             print("\n".join(await _setup_vault(base)) or "Everything already existed.")
 
         asyncio.run(_main())

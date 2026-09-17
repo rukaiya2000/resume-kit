@@ -30,7 +30,15 @@ export const DEFAULT_DESIGN: Design = {
     color: 'accent',
     border: { enabled: true, width: 0.75, style: 'solid', gap: 2 },
   },
-  entry: { datePosition: 'right', bullet: '•', dateFormat: 'MMM yyyy', titleBold: true, subtitleItalic: true },
+  entry: {
+    datePosition: 'right',
+    bullet: '•',
+    dateFormat: 'MMM yyyy',
+    titleBold: true,
+    subtitleItalic: true,
+    skillSeparator: ', ',
+    awardDescription: 'inline',
+  },
   sectionOverrides: {},
   fit: { enabled: true, minScale: 0.8, maxScale: 1.15, minBaseFont: 9 },
 };
