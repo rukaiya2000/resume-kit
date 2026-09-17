@@ -1,0 +1,22 @@
+{
+  "name": "@rc/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@rc/core": "workspace:*",
+    "hono": "^4.13.8",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.63.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.13"
+  }
+}

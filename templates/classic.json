@@ -1,0 +1,81 @@
+{
+  "id": "classic",
+  "name": "Classic ATS",
+  "schemaVersion": 1,
+  "design": {
+    "page": {
+      "size": "Letter",
+      "margin": {
+        "top": 0.5,
+        "right": 0.6,
+        "bottom": 0.5,
+        "left": 0.6
+      }
+    },
+    "font": {
+      "family": "IBM Plex Sans",
+      "base": 10.5,
+      "name": 20,
+      "headline": 11,
+      "sectionTitle": 11.5,
+      "meta": 10
+    },
+    "spacing": {
+      "lineHeight": 1.25,
+      "letterSpacing": 0,
+      "section": 10,
+      "entry": 6,
+      "bullet": 1.5,
+      "sectionPadding": 0,
+      "bulletIndent": 12,
+      "header": 6
+    },
+    "colors": {
+      "text": "#111111",
+      "accent": "#1a3d6d",
+      "divider": "#333333",
+      "muted": "#444444"
+    },
+    "header": {
+      "align": "center",
+      "separator": "|",
+      "nameCase": "upper",
+      "divider": false
+    },
+    "sectionTitle": {
+      "case": "upper",
+      "bold": true,
+      "color": "accent",
+      "border": {
+        "enabled": true,
+        "width": 0.75,
+        "style": "solid",
+        "gap": 2
+      }
+    },
+    "entry": {
+      "datePosition": "right",
+      "bullet": "•",
+      "dateFormat": "MMM yyyy",
+      "titleBold": true,
+      "subtitleItalic": true
+    },
+    "sectionOverrides": {},
+    "fit": {
+      "enabled": true,
+      "minScale": 0.8,
+      "maxScale": 1.15,
+      "minBaseFont": 9
+    }
+  },
+  "defaultSections": [
+    "basics",
+    "education",
+    "skills",
+    "employment",
+    "projects",
+    "awards"
+  ],
+  "createdAt": "2026-09-16T23:55:21.101Z",
+  "updatedAt": "2026-09-16T23:55:21.101Z"
+}

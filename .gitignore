@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+# personal data
+resumes/
+data/
+build/
+*.log
+
+# personal files dropped in the project root
+/*.pdf
+/*.docx
