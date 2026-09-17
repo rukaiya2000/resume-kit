@@ -8,6 +8,10 @@
 **Under another name (reword to match the job):** {{alias_only}}
 **Missing (required):** {{missing_required}}
 **Missing (preferred):** {{missing_preferred}}
+**Not in the skills dictionary** (can't be scored yet): {{not_in_dictionary}}
+
+**PDF text check** (what an ATS can read):
+{{pdf_check}}
 
 ### Gaps
 **Real gaps** (not in your notes):
@@ -28,6 +32,9 @@
 
 **Application tips:**
 {{application_tips}}
+
+### Changes from Base
+{{changes}}
 
 ## Generated Resume
 ```text

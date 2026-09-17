@@ -12,10 +12,11 @@ import logging
 import os
 import re
 import sys
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -26,7 +27,20 @@ from mcp.server.mcpserver.exceptions import ResourceNotFoundError, ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
-from scoring import KeywordMatch, camel, keyword_match, plain, resume_to_text
+from scoring import (
+    Changes,
+    KeywordMatch,
+    NewSkill,
+    PdfCheck,
+    add_skills,
+    camel,
+    check_pdf,
+    diff_resumes,
+    keyword_match,
+    known_skill,
+    plain,
+    resume_to_text,
+)
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent
@@ -240,6 +254,19 @@ def section(resume: Resume, kind: str) -> dict[str, Any] | None:
     return next((s for s in resume["sections"] if s["type"] == kind), None)
 
 
+async def pdf_check(ctx: Context, resume: Resume) -> PdfCheck | None:
+    """Downloads the resume's latest export and checks its text layer against the resume."""
+    if not resume["exports"]:
+        return None
+    state = app(ctx)
+    await state.connect()
+    res = await state.http.get(f"{state.base}/files/pdf", params={"path": resume["exports"][-1]["path"]})
+    if res.is_error:
+        return None
+    job = resume.get("job") or {}
+    return check_pdf(res.content, resume, job.get("description", ""), job.get("title", ""))
+
+
 def entries(resume: Resume, kind: str) -> list[dict[str, Any]]:
     return (section(resume, kind) or {"entries": []})["entries"]
 
@@ -315,6 +342,7 @@ class ExportResult(BaseModel):
     pages: int
     fits_one_page: bool
     file_url: str
+    pdf_check: PdfCheck | None
     next_step: str
 
 
@@ -323,6 +351,31 @@ class ReportResult(BaseModel):
     score: int
     must_have: str
     pdf: str | None
+
+
+class ConfirmSkills(BaseModel):
+    add: bool = Field(description="Add these skills to the skills dictionary?")
+
+
+class WeeklyJob(BaseModel):
+    job: str
+    company: str
+    role: str
+    status: str
+    score: int | None
+    must_have: str | None
+    generated_at: str | None
+    missing_keywords: list[str]
+    real_gaps: list[str]
+
+
+class WeeklySummary(BaseModel):
+    week_of: str
+    jobs: list[WeeklyJob]
+    by_status: dict[str, int]
+    average_score: float | None
+    top_missing_keywords: list[tuple[str, int]]
+    top_real_gaps: list[tuple[str, int]]
 
 
 class ConfirmUpdate(BaseModel):
@@ -695,22 +748,40 @@ async def export_resume(resume_id: str, ctx: Context) -> ExportResult:
     """Render the PDF into resumes/week-of-<Monday>/ (fit-to-one-page applies) and report the page count."""
     await ctx.report_progress(0, 1, "Rendering PDF")
     result = await api(ctx, "POST", f"/resumes/{resume_id}/export")
-    await ctx.report_progress(1, 1, "Done")
+    await ctx.report_progress(1, 2, "Checking the PDF text")
+    check = await pdf_check(ctx, await api(ctx, "GET", f"/resumes/{resume_id}"))
+    await ctx.report_progress(2, 2, "Done")
     fits = result["pages"] == 1
+    unreadable = check and (not check.extractable or check.missing_keywords or check.missing_bullets)
+    if not fits:
+        next_step = "Over one page even at minimum scale: cut per the writing style guide, save and export again."
+    elif unreadable:
+        next_step = (
+            "Some content isn't readable in the PDF text (see pdf_check); tell the user, then call save_match_report."
+        )
+    else:
+        next_step = "Call save_match_report."
     return ExportResult(
         path=result["path"],
         pages=result["pages"],
         fits_one_page=fits,
         file_url=app(ctx).pdf_url(result["path"]),
-        next_step="Call save_match_report."
-        if fits
-        else "Over one page even at minimum scale: cut per the writing style guide, save and export again.",
+        pdf_check=check,
+        next_step=next_step,
     )
 
 
 @mcp.tool(annotations=ToolAnnotations(destructiveHint=False, idempotentHint=True))
 async def save_match_report(
-    job: str, resume_id: str, requirements: list[Requirement], gaps: Gaps, improvements: Improvements, ctx: Context
+    job: str,
+    resume_id: str,
+    requirements: list[Requirement],
+    gaps: Gaps,
+    improvements: Improvements,
+    ctx: Context,
+    not_in_dictionary: Annotated[
+        list[str], Field(description="Skills the JD asks for that the skills dictionary doesn't know")
+    ] = [],  # noqa: B006 (pydantic copies defaults)
 ) -> ReportResult:
     """Store the review on the resume (shown in the app) and write it into the Obsidian job note.
 
@@ -719,12 +790,18 @@ async def save_match_report(
     note = find_job(job)
     resume = await api(ctx, "GET", f"/resumes/{resume_id}")
     kw = keyword_match(note.description, note.role, resume)
+    changes = diff_resumes(await base_resume(ctx), resume)
+    check = await pdf_check(ctx, resume)
+    unknown = [s for s in not_in_dictionary if not known_skill(s)]
     match = camel(
         {
             "keywords": kw.model_dump(),
             "requirements": [r.model_dump() for r in requirements],
             "gaps": gaps.model_dump(),
             "improvements": improvements.model_dump(),
+            "not_in_dictionary": unknown,
+            "changes": changes.model_dump(),
+            "pdf_check": check.model_dump() if check else None,
             "scored_at": datetime.now(UTC).isoformat(),
         }
     )
@@ -765,6 +842,9 @@ async def save_match_report(
         strengthen=bullets(improvements.strengthen),
         upskill=bullets(improvements.upskill),
         application_tips=bullets(improvements.application_tips),
+        not_in_dictionary=", ".join(unknown) or "—",
+        pdf_check=render_pdf_check(check),
+        changes=render_changes(changes),
         resume_text=resume_to_text(resume, only={"skills", "employment", "projects"}),
     )
     status = note.get("status") if note.get("status") in FIXED_STATUSES else "generated"
@@ -786,6 +866,151 @@ async def save_match_report(
     return ReportResult(
         note=str(path), score=kw.score, must_have=f"{kw.must_have.matched}/{kw.must_have.total}", pdf=last
     )
+
+
+def render_pdf_check(check: PdfCheck | None) -> str:
+    if check is None:
+        return "_Not exported yet._"
+    if not check.extractable:
+        return "⚠️ The PDF has almost no readable text; an ATS may not parse it."
+    problems = [f"keyword not readable: {k}" for k in check.missing_keywords]
+    problems += [f"bullet not readable: “{b[:80]}…”" for b in check.missing_bullets[:5]]
+    return bullets(problems, f"✅ All text readable ({check.pages} page{'s' if check.pages != 1 else ''}).")
+
+
+def render_changes(changes: Changes) -> str:
+    lines = [f"_{changes.unchanged_bullets} bullet(s) kept as-is._", ""]
+    for label, items in [
+        ("Skills added", changes.skills_added),
+        ("Skills removed", changes.skills_removed),
+        ("Projects added", changes.projects_added),
+        ("Projects removed", changes.projects_removed),
+    ]:
+        if items:
+            lines.append(f"**{label}:** {', '.join(items)}")
+    for c in changes.bullets:
+        match c.kind:
+            case "rewritten":
+                lines += [f"- **{c.entry}** rewritten:", f"  - before: {c.before}", f"  - after: {c.after}"]
+            case "added":
+                lines.append(f"- **{c.entry}** added: {c.after}")
+            case "removed":
+                lines.append(f"- **{c.entry}** removed: {c.before}")
+    return "\n".join(lines).strip()
+
+
+# ---------- skills dictionary ----------
+
+
+async def confirm_skills(skills: list[NewSkill], ctx: Context) -> Elicit[ConfirmSkills] | ConfirmSkills:
+    """Resolver: show the user exactly what will be added to the dictionary."""
+    caps = ctx.client_capabilities
+    fresh = [s for s in skills if not known_skill(s.name)]
+    if not fresh or caps is None or caps.elicitation is None:
+        return ConfirmSkills(add=True)
+    listing = "; ".join(f"{s.name}" + (f" (aliases: {', '.join(s.aliases)})" if s.aliases else "") for s in fresh)
+    return Elicit(f"Add to the skills dictionary: {listing}?", ConfirmSkills)
+
+
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=False, idempotentHint=True))
+async def add_to_skills_dictionary(
+    skills: list[NewSkill], confirm: Annotated[ConfirmSkills, Resolve(confirm_skills)]
+) -> list[str]:
+    """Teach the keyword scorer skills a job description uses but knowledge/skills-dictionary.md lacks.
+
+    Asks the user first. `category` should be an existing heading (Languages, ML / AI, Web & backend, Frontend,
+    Databases, Cloud & DevOps, Concepts). Returns the names actually added; known skills are skipped."""
+    if not confirm.add:
+        raise ToolError("The user declined; nothing was added.")
+    return add_skills(skills)
+
+
+# ---------- weekly review ----------
+
+
+def week_start(value: str = "") -> date:
+    day = date.fromisoformat(value) if value else date.today()
+    return day - timedelta(days=day.weekday())
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def get_weekly_summary(
+    ctx: Context,
+    week_of: Annotated[str, Field(description="Any date in the week (YYYY-MM-DD); default this week")] = "",
+) -> WeeklySummary:
+    """Roll up the job notes generated that week: scores, statuses, most common missing keywords and real gaps."""
+    monday = week_start(week_of)
+    jobs: list[WeeklyJob] = []
+    for note in job_notes():
+        generated = note.get("generated_at")
+        if not generated or not monday <= date.fromisoformat(generated[:10]) < monday + timedelta(days=7):
+            continue
+        real_gaps: list[str] = []
+        if resume_id := note.get("resume_id"):
+            try:
+                resume = await api(ctx, "GET", f"/resumes/{resume_id}")
+                real_gaps = ((resume.get("match") or {}).get("gaps") or {}).get("real", [])
+            except ToolError:
+                pass
+        jobs.append(
+            WeeklyJob(
+                job=note.id, company=note.company, role=note.role, status=note.get("status") or "todo",
+                score=note.meta.get("match_score"), must_have=note.get("must_have_coverage") or None,
+                generated_at=generated[:10], missing_keywords=list(note.meta.get("missing_keywords") or []),
+                real_gaps=real_gaps,
+            )
+        )  # fmt: skip
+    scores = [j.score for j in jobs if j.score is not None]
+    return WeeklySummary(
+        week_of=monday.isoformat(),
+        jobs=jobs,
+        by_status=dict(Counter(j.status for j in jobs)),
+        average_score=round(sum(scores) / len(scores), 1) if scores else None,
+        top_missing_keywords=Counter(k for j in jobs for k in j.missing_keywords).most_common(10),
+        top_real_gaps=Counter(g for j in jobs for g in j.real_gaps).most_common(10),
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=False, idempotentHint=True))
+async def save_weekly_review(
+    ctx: Context,
+    focus: Annotated[list[str], Field(description="2-4 themes the week's gaps point to")],
+    learning_plan: Annotated[list[str], Field(description="Concrete, weekend-sized actions to close the top gaps")],
+    week_of: str = "",
+    notes: str = "",
+) -> str:
+    """Write Reviews/Week of <Monday>.md from templates/weekly-review.md (replaces that week's review)."""
+    summary = await get_weekly_summary(ctx, week_of)
+    require_vault()
+    rows = [
+        f"| [[{j.job}]] | {j.status} | {j.score if j.score is not None else '—'} | {j.must_have or '—'} | "
+        f"{cell(', '.join(j.missing_keywords)) or '—'} |"
+        for j in summary.jobs
+    ]
+    table = "\n".join(["| Job | Status | Score | Must-have | Missing keywords |", "|---|---|---|---|---|", *rows])
+    content = fill(
+        md("templates", "weekly-review.md"),
+        week_of=summary.week_of,
+        count=len(summary.jobs),
+        average=summary.average_score if summary.average_score is not None else "—",
+        statuses=", ".join(f"{k}: {v}" for k, v in summary.by_status.items()) or "—",
+        jobs_table=table if rows else "_No resumes generated this week._",
+        top_missing=bullets([f"{name} ({n}×)" for name, n in summary.top_missing_keywords]),
+        top_gaps=bullets([f"{name} ({n}×)" for name, n in summary.top_real_gaps]),
+        focus=bullets(focus),
+        learning_plan=bullets(learning_plan),
+        notes=notes or "—",
+    )
+    path = VAULT / "Reviews" / f"Week of {summary.week_of}.md"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return str(path)
+
+
+@mcp.prompt(title="Weekly job-search review")
+def weekly_review(week_of: str = "") -> str:
+    """Summarize the week's applications and turn the most common gaps into a learning plan."""
+    return fill(md("prompts", "weekly-review.md"), week_of=week_of or "this week")
 
 
 if __name__ == "__main__":

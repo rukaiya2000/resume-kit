@@ -133,6 +133,16 @@ function MatchBody({ match, history }: { match: MatchReport; history: MatchHisto
         </Block>
       )}
 
+      {match.notInDictionary.length > 0 && (
+        <Block title="Not in the skills dictionary">
+          <Chips label="Couldn't be scored" items={match.notInDictionary} tone="neutral" />
+        </Block>
+      )}
+
+      {match.pdfCheck && <PdfCheckBlock check={match.pdfCheck} />}
+
+      {match.changes && <ChangesBlock changes={match.changes} />}
+
       {Object.values(match.improvements).some((v) => v.length) && (
         <Block title="How to improve">
           <List label="Add to your notes" items={match.improvements.addToNotes} />
@@ -173,6 +183,51 @@ function History({ history }: { history: MatchHistoryEntry[] }) {
         </span>
       </div>
     </section>
+  );
+}
+
+function PdfCheckBlock({ check }: { check: NonNullable<MatchReport['pdfCheck']> }) {
+  const problems = !check.extractable || check.missingKeywords.length > 0 || check.missingBullets.length > 0;
+  return (
+    <Block title="PDF text check">
+      {!problems ? (
+        <p className="text-[13px] text-emerald-700">All text is readable in the PDF ({check.pages} page{check.pages === 1 ? '' : 's'}).</p>
+      ) : !check.extractable ? (
+        <p className="text-[13px] text-red-600">The PDF has almost no readable text; an ATS may not parse it.</p>
+      ) : (
+        <>
+          <Chips label="Keywords not readable" items={check.missingKeywords} tone="bad" />
+          <List label="Bullets not readable" items={check.missingBullets.slice(0, 5)} />
+        </>
+      )}
+    </Block>
+  );
+}
+
+function ChangesBlock({ changes }: { changes: NonNullable<MatchReport['changes']> }) {
+  const kinds = { rewritten: 'Rewritten', added: 'Added', removed: 'Removed' } as const;
+  return (
+    <Block title={`Changes from Base · ${changes.unchangedBullets} bullet${changes.unchangedBullets === 1 ? '' : 's'} kept as-is`}>
+      <Chips label="Skills added" items={changes.skillsAdded} tone="ok" />
+      <Chips label="Skills removed" items={changes.skillsRemoved} tone="neutral" />
+      <Chips label="Projects added" items={changes.projectsAdded} tone="ok" />
+      <Chips label="Projects removed" items={changes.projectsRemoved} tone="neutral" />
+      {changes.bullets.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {changes.bullets.map((c, i) => (
+            <li key={i} className="rounded-lg border border-zinc-100 px-3 py-2 text-[13px]">
+              <div className="mb-1 flex items-center gap-2">
+                <Pill tone={c.kind === 'removed' ? 'neutral' : c.kind === 'added' ? 'ok' : 'accent'}>{kinds[c.kind]}</Pill>
+                <span className="font-medium">{c.entry}</span>
+                <span className="text-zinc-500">{c.section}</span>
+              </div>
+              {c.before && <p className={cn('text-zinc-500', c.after && 'line-through decoration-zinc-300')}>{c.before}</p>}
+              {c.after && <p className="text-zinc-900">{c.after}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Block>
   );
 }
 

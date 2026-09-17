@@ -1,21 +1,24 @@
-"""Keyword scoring of a resume against a job description.
+"""Resume analysis: keyword scoring against a job description, Base-vs-tailored diff, and PDF text checks.
 
-Ported from ~/Documents/ats-scorer (Rizzume) @ 476e61d. The skills dictionary lives in
+Keyword scoring is ported from ~/Documents/ats-scorer (Rizzume) @ 476e61d. The skills dictionary lives in
 knowledge/skills-dictionary.md so it can be edited without touching code.
 
 CLI (used by the app's Re-score button): JSON {jobDescription, jobTitle, resume} on stdin → KeywordMatch JSON.
 """
 
+import io
 import json
 import re
 import sys
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 from pydantic.alias_generators import to_camel
+from pypdf import PdfReader
 
 DICTIONARY = Path(__file__).with_name("knowledge") / "skills-dictionary.md"
 
@@ -259,6 +262,144 @@ def keyword_match(jd: str, title: str, resume: Resume) -> KeywordMatch:
 
     # Alias matches earn 60%: the skill is there, but ATS search wouldn't find it until reworded.
     result.score = round(100 * min(1.0, exact_w / total_weight + 0.6 * alias_w / total_weight))
+    return result
+
+
+# ---------- dictionary edits ----------
+
+
+class NewSkill(BaseModel):
+    name: str
+    aliases: list[str] = []
+    category: str = "Added from job descriptions"
+    rewrite_safe: bool = True
+
+
+def known_skill(name: str, path: Path = DICTIONARY) -> bool:
+    lowered = name.strip().lower()
+    return any(lowered == form.lower() for skill in load_dictionary(path) for form in skill.forms)
+
+
+def add_skills(new: list[NewSkill], path: Path = DICTIONARY) -> list[str]:
+    """Appends rows to the category's table in the markdown (creating the section if needed). Returns names added."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    added: list[str] = []
+    for skill in new:
+        if known_skill(skill.name, path) or skill.name.lower() in (a.lower() for a in added):
+            continue
+        row = f"| {skill.name} | {', '.join(skill.aliases)} | {'yes' if skill.rewrite_safe else 'no'} |"
+        heading = next(
+            (i for i, line in enumerate(lines) if line.strip().lower() == f"## {skill.category}".lower()), None
+        )
+        if heading is None:
+            lines += ["", f"## {skill.category}", "", "| Skill | Aliases | Rewrite-safe |", "|---|---|---|", row]
+        else:
+            end = heading + 1
+            while end < len(lines) and not lines[end].startswith("## "):
+                end += 1
+            last_row = max((i for i in range(heading, end) if lines[i].startswith("|")), default=end - 1)
+            lines.insert(last_row + 1, row)
+        added.append(skill.name)
+    if added:
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        load_dictionary.cache_clear()
+    return added
+
+
+# ---------- Base vs tailored ----------
+
+
+class BulletChange(BaseModel):
+    section: str
+    entry: str
+    kind: Literal["rewritten", "added", "removed"]
+    before: str = ""
+    after: str = ""
+
+
+class Changes(BaseModel):
+    skills_added: list[str] = []
+    skills_removed: list[str] = []
+    projects_added: list[str] = []
+    projects_removed: list[str] = []
+    bullets: list[BulletChange] = []
+    unchanged_bullets: int = 0
+
+
+def _visible_entries(resume: Resume, kind: str) -> list[dict[str, Any]]:
+    section = next((s for s in resume["sections"] if s["type"] == kind), None)
+    return [e for e in section["entries"] if e["visible"]] if section and section["visible"] else []
+
+
+def _diff_bullets(label: str, entry: str, before: list[str], after: list[str], out: Changes) -> None:
+    remaining = [plain(b) for b in before if b.strip()]
+    for new in (plain(b) for b in after if b.strip()):
+        scored = [(SequenceMatcher(None, old, new).ratio(), old) for old in remaining]
+        ratio, best = max(scored, default=(0.0, ""))
+        if ratio >= 0.97:
+            out.unchanged_bullets += 1
+            remaining.remove(best)
+        elif ratio >= 0.45:
+            out.bullets.append(BulletChange(section=label, entry=entry, kind="rewritten", before=best, after=new))
+            remaining.remove(best)
+        else:
+            out.bullets.append(BulletChange(section=label, entry=entry, kind="added", after=new))
+    out.bullets += [BulletChange(section=label, entry=entry, kind="removed", before=old) for old in remaining]
+
+
+def _skills(resume: Resume) -> list[str]:
+    return list(dict.fromkeys(i.strip() for e in _visible_entries(resume, "skills") for i in e["items"]))
+
+
+def diff_resumes(base: Resume, tailored: Resume) -> Changes:
+    """What tailoring changed in Technical Skills, Experience and Projects (bullets are paired by similarity)."""
+    out = Changes()
+    base_skills, new_skills = _skills(base), _skills(tailored)
+    out.skills_added = [s for s in new_skills if s.lower() not in {b.lower() for b in base_skills}]
+    out.skills_removed = [s for s in base_skills if s.lower() not in {n.lower() for n in new_skills}]
+
+    base_jobs = {e["id"]: e for e in _visible_entries(base, "employment")}
+    for job in _visible_entries(tailored, "employment"):
+        _diff_bullets("Experience", job["title"], base_jobs.pop(job["id"], {}).get("bullets", []), job["bullets"], out)
+    for job in base_jobs.values():  # hidden on the tailored resume
+        _diff_bullets("Experience", job["title"], job["bullets"], [], out)
+
+    base_projects = {e["title"].lower(): e for e in _visible_entries(base, "projects")}
+    for project in _visible_entries(tailored, "projects"):
+        if (old := base_projects.pop(project["title"].lower(), None)) is None:
+            out.projects_added.append(project["title"])
+        else:
+            _diff_bullets("Projects", project["title"], old["bullets"], project["bullets"], out)
+    out.projects_removed = [p["title"] for p in base_projects.values()]
+    return out
+
+
+# ---------- PDF text check ----------
+
+
+class PdfCheck(BaseModel):
+    pages: int
+    extractable: bool
+    missing_keywords: list[str] = []  # on the resume, but not readable in the PDF text
+    missing_bullets: list[str] = []
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
+def check_pdf(pdf: bytes, resume: Resume, jd: str = "", title: str = "") -> PdfCheck:
+    """Reads the PDF the way an ATS would and reports resume content that doesn't come through as text."""
+    reader = PdfReader(io.BytesIO(pdf))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    squashed = _squash(text)
+    result = PdfCheck(pages=len(reader.pages), extractable=len(squashed) > 200)
+    if jd:
+        result.missing_keywords = [k for k in keyword_match(jd, title, resume).matched if _squash(k) not in squashed]
+    all_bullets = [
+        plain(b) for s in resume["sections"] if s["visible"] for e in s["entries"] if e["visible"] for b in e["bullets"]
+    ]
+    result.missing_bullets = [b for b in all_bullets if b.strip() and _squash(b) not in squashed]
     return result
 
 

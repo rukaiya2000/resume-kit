@@ -118,6 +118,7 @@ _Adapted from ~/Documents/ats-scorer (Rizzume) @ 476e61d._
 | SQS |  | yes |
 | S3 |  | yes |
 | CloudWatch |  | yes |
+| Airflow | apache airflow | yes |
 
 ## Concepts
 

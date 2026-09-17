@@ -28,3 +28,11 @@ Concrete and honest; never suggest claiming something untrue.
 - `applicationTips`: what to highlight in a cover letter, recruiter message or interview.
 
 Keep each item to one sentence.
+
+## `not_in_dictionary`
+
+JD skills and tools the skills dictionary doesn't know and the user chose not to add. They can't be keyword-scored, so judge them in `requirements` instead.
+
+## Automatic
+
+You don't pass these; `save_match_report` computes them: the keyword score, a **Changes from Base** diff (skills, projects and bullets added, removed or rewritten), and a **PDF text check**. Skim the diff before reporting back: every rewritten bullet must still say only what the original fact says.

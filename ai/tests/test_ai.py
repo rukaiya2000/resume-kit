@@ -44,7 +44,7 @@ def resume(skills: list[str], bullets: list[str] = (), project_bullets: list[str
 def test_dictionary_markdown_parses_every_skill():
     skills = scoring.load_dictionary()
     names = {s.name for s in skills}
-    assert len(skills) == 90
+    assert len(skills) >= 90  # grows as skills are added from job descriptions
     assert {"Python", "PostgreSQL", "Kubernetes", "CI/CD"} <= names
     sql = next(s for s in skills if s.name == "SQL")
     assert "sqlite" in sql.aliases and not sql.rewrite_safe
@@ -146,3 +146,61 @@ def test_write_note_replaces_generated_block(server):
     assert text.count(server.BLOCK_START) == 1 and "second" in text and "first" not in text
     again = server.find_job("Acme - Engineer")
     assert again.description == "The job description." and again.meta["match_score"] == 90
+
+
+# ---------- dictionary edits, diff, PDF check, weekly ----------
+
+
+def test_add_skills_appends_to_category_table_and_skips_known(tmp_path):
+    # A copy of the real dictionary: the test must not edit ai/knowledge.
+    dictionary = tmp_path / "skills.md"
+    dictionary.write_text(scoring.DICTIONARY.read_text())
+    new = [
+        scoring.NewSkill(name="Dagster", aliases=["dagster cloud"], category="Cloud & DevOps"),
+        scoring.NewSkill(name="python", category="Languages"),  # already known (case-insensitive)
+        scoring.NewSkill(name="Zzbenchmarkdb", category="Test Section"),  # new section
+    ]
+    added = scoring.add_skills(new, path=dictionary)
+    assert added == ["Dagster", "Zzbenchmarkdb"]
+    text = dictionary.read_text()
+    cloud = text.split("## Cloud & DevOps")[1].split("## ")[0]
+    assert "| Dagster | dagster cloud | yes |" in cloud
+    assert "## Test Section" in text and "| Zzbenchmarkdb |  | yes |" in text
+    skills = {s.name: s for s in scoring.load_dictionary(dictionary)}
+    assert "dagster cloud" in skills["Dagster"].aliases and skills["Zzbenchmarkdb"].category == "Test Section"
+    assert scoring.add_skills(new, path=dictionary) == []  # idempotent
+
+
+def test_diff_resumes_pairs_rewritten_bullets():
+    base = resume(
+        ["Python", "Java"], ["Built REST APIs serving 20k users", "Cut latency by 90% with Redis"], ["Chatbot"]
+    )
+    tailored = resume(
+        ["Python", "Docker"], ["Built REST APIs in Python serving 20k users", "Mentored two interns"], ["Chatbot"]
+    )
+    changes = scoring.diff_resumes(base, tailored)
+    assert changes.skills_added == ["Docker"] and changes.skills_removed == ["Java"]
+    kinds = {c.kind: c for c in changes.bullets}
+    assert kinds["rewritten"].before.startswith("Built REST APIs serving")
+    assert kinds["added"].after == "Mentored two interns"
+    assert kinds["removed"].before.startswith("Cut latency")
+    assert changes.unchanged_bullets == 1  # the project bullet
+
+
+def test_check_pdf_flags_unreadable_pdf():
+    from io import BytesIO
+
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(612, 792)
+    buffer = BytesIO()
+    writer.write(buffer)
+    check = scoring.check_pdf(buffer.getvalue(), resume(["Python"], ["Built APIs"]), JD, "Engineer")
+    assert check.pages == 1 and not check.extractable
+    assert check.missing_bullets == ["Built APIs"]
+
+
+def test_week_start_is_monday(server):
+    assert server.week_start("2026-09-16").isoformat() == "2026-09-14"
+    assert server.week_start("2026-09-20").isoformat() == "2026-09-14"

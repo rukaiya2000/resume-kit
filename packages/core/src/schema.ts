@@ -178,6 +178,36 @@ export const MatchReport = z.object({
       applicationTips: z.array(z.string()),
     })
     .default({ addToNotes: [], strengthen: [], upskill: [], applicationTips: [] }),
+  /** JD skills the keyword scorer's dictionary doesn't know (so they couldn't be scored). */
+  notInDictionary: z.array(z.string()).default([]),
+  /** What tailoring changed compared with the Base resume. */
+  changes: z
+    .object({
+      skillsAdded: z.array(z.string()),
+      skillsRemoved: z.array(z.string()),
+      projectsAdded: z.array(z.string()),
+      projectsRemoved: z.array(z.string()),
+      bullets: z.array(
+        z.object({
+          section: z.string(),
+          entry: z.string(),
+          kind: z.enum(['rewritten', 'added', 'removed']),
+          before: z.string(),
+          after: z.string(),
+        }),
+      ),
+      unchangedBullets: z.number(),
+    })
+    .optional(),
+  /** Text readable from the exported PDF (what an ATS parses). */
+  pdfCheck: z
+    .object({
+      pages: z.number(),
+      extractable: z.boolean(),
+      missingKeywords: z.array(z.string()),
+      missingBullets: z.array(z.string()),
+    })
+    .nullish(),
   scoredAt: z.string(),
 });
 export type MatchReport = z.infer<typeof MatchReport>;
